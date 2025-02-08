@@ -22,7 +22,7 @@ tri_args = []
 tri_args += '-DTRI_WITH_VULKAN_VALIDATION=@0@'.format(
   get_option('buildtype') == 'debug' ? 1 : 0)
 
-executable('tri', ['main.cpp', 'TriApp.cpp', 'TriLog.cpp'],
+executable('tri', ['main.cpp', 'TriApp.cpp', 'TriLog.cpp', 'VkExtLibrary.cpp'],
            include_directories : vulkan_headers,
            dependencies : deps,
            cpp_args : tri_args)

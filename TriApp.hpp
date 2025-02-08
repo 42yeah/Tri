@@ -1,6 +1,9 @@
 #pragma once
 
-#include "vulkan/vulkan_core.h"
+#include "VkExtLibrary.hpp"
+
+#include <vulkan/vk_platform.h>
+#include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -12,7 +15,8 @@ class TriApp
 public:
     TriApp(const std::string &appName, int width, int height)
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
-            mInstance(nullptr), mInstanceExtensions(), mInstanceLayers()
+          mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
+          mLibrary(), mDebugUtilsMessenger(nullptr)
     {
     }
 
@@ -27,6 +31,13 @@ public:
     void Init();
     void Loop();
     void Finalize();
+
+public:
+    static VKAPI_ATTR VkBool32 VKAPI_CALL
+    VKDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                    VkDebugUtilsMessageTypeFlagsEXT type,
+                    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+                    void *pUserData);
 
 private:
     void RenderFrame();
@@ -44,4 +55,10 @@ private:
     VkInstance mInstance;
     std::vector<VkExtensionProperties> mInstanceExtensions;
     std::vector<VkLayerProperties> mInstanceLayers;
+
+    VkExtLibary mLibrary;
+
+#if TRI_WITH_VULKAN_VALIDATION
+    VkDebugUtilsMessengerEXT mDebugUtilsMessenger;
+#endif
 };

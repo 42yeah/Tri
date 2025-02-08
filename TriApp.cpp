@@ -82,7 +82,7 @@ void TriApp::Init()
     if (!mInstance)
     {
         // Create Vulkan instance
-        VkApplicationInfo appInfo;
+        VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pNext = nullptr;
         appInfo.pApplicationName = mAppName.c_str();
@@ -91,7 +91,7 @@ void TriApp::Init()
         appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
-        VkInstanceCreateInfo createInfo;
+        VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pNext = nullptr;
         createInfo.pApplicationInfo = &appInfo;
@@ -145,7 +145,7 @@ void TriApp::Init()
     {
 
         // Setup VkDebugUtilsMessenger
-        VkDebugUtilsMessengerCreateInfoEXT createInfo;
+        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
         createInfo.sType =
             VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         createInfo.pNext = nullptr;
@@ -188,16 +188,19 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
-    mLibrary.Finalize();
-
     if (mDebugUtilsMessenger)
     {
-        // TODO(42): Destroy the thing
+        mLibrary.DestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger,
+                                               nullptr);
+        mDebugUtilsMessenger = nullptr;
     }
 
+    mLibrary.Finalize();
+    
     if (mInstance)
     {
         vkDestroyInstance(mInstance, nullptr);
+        mInstance = nullptr;
     }
 
     if (mpWindow)

@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#define VK_EXT_FUNC_DECLARE_ITERATE(funcName, params, args)                    \
+#define VK_EXT_FUNC_ITERATE(funcName, params, args)                            \
     VkResult funcName params                                                   \
     {                                                                          \
         void *func = mFuncs[#funcName];                                        \
@@ -27,6 +27,25 @@
         return reinterpret_cast<PFN_vk##funcName>(func) args;                  \
     }
 
+#define VK_EXT_FUNC_ITERATE_VOID(funcName, params, args)                       \
+    void funcName params                                                       \
+    {                                                                          \
+        void *func = mFuncs[#funcName];                                        \
+        if (!func)                                                             \
+        {                                                                      \
+            func = reinterpret_cast<void *>(                                   \
+                vkGetInstanceProcAddr(instance, "vk" #funcName));              \
+            if (!func)                                                         \
+            {                                                                  \
+                TriLogError()                                                  \
+                    << "Extension function not found: " << "vk" #funcName;     \
+                return;                                                        \
+            }                                                                  \
+            mFuncs[#funcName] = func;                                          \
+        }                                                                      \
+        reinterpret_cast<PFN_vk##funcName>(func) args;                         \
+    }
+
 // Class that loads Vulkan extension functions
 
 class VkExtLibary
@@ -41,13 +60,19 @@ public:
     void Finalize();
 
 public:
-    VK_EXT_FUNC_DECLARE_ITERATE(
+    VK_EXT_FUNC_ITERATE(
         CreateDebugUtilsMessengerEXT,
         (VkInstance instance,
          const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
          const VkAllocationCallbacks *pAllocator,
          VkDebugUtilsMessengerEXT *pDebugMessenger),
-        (instance, pCreateInfo, pAllocator, pDebugMessenger));
+         (instance, pCreateInfo, pAllocator, pDebugMessenger));
+
+    VK_EXT_FUNC_ITERATE_VOID(DestroyDebugUtilsMessengerEXT,
+                        (VkInstance instance,
+                         VkDebugUtilsMessengerEXT debugMessenger,
+                         const VkAllocationCallbacks *pAllocator),
+                         (instance, debugMessenger, pAllocator));
 
 private:
     std::unordered_map<std::string, void *> mFuncs;

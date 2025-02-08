@@ -1,3 +1,8 @@
 option('vulkan_sdk_root',
        type : 'string',
        description : 'Vulkan SDK root directory path')
+
+option('colored_log',
+       type : 'boolean',
+       description : 'Should be output logs be colored',
+       value : true)

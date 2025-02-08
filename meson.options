@@ -1,0 +1,3 @@
+option('vulkan_sdk_root',
+       type : 'string',
+       description : 'Vulkan SDK root directory path')

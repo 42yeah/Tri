@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TriGraphicsUtils.hpp"
 #include "VkExtLibrary.hpp"
 
 #include <vulkan/vk_platform.h>
@@ -16,7 +17,7 @@ public:
     TriApp(const std::string &appName, int width, int height)
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
-          mLibrary(), mDebugUtilsMessenger(nullptr)
+          mLibrary(), mDebugUtilsMessenger(nullptr), mDevice(nullptr)
     {
     }
 
@@ -26,7 +27,8 @@ public:
     /* Initialize Vulkan-related stuffs:
 
        1. Create Vulkan instance
-       
+       2. Setup debug utils messenger
+       3. Setup Vulkan physical device
     */
     void Init();
     void Loop();
@@ -40,6 +42,13 @@ public:
                     void *pUserData);
 
 private:
+    void PopulateDebugUtilsMessengerCreateInfoEXT(
+        VkDebugUtilsMessengerCreateInfoEXT &createInfo);
+
+    int RateDeviceSuitability(VkPhysicalDevice device);
+
+    QueueFamilyIndices FindQueueFamilies();
+    
     void RenderFrame();
 
 private:
@@ -61,4 +70,7 @@ private:
 #if TRI_WITH_VULKAN_VALIDATION
     VkDebugUtilsMessengerEXT mDebugUtilsMessenger;
 #endif
+
+    VkPhysicalDevice mDevice;
+    QueueFamilyIndices mQueueFamilyIndices;
 };

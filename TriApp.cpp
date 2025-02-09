@@ -1,5 +1,6 @@
 #include "TriApp.hpp"
 
+#include "TriGraphicsUtils.hpp"
 #include "TriLog.hpp"
 
 #include <GLFW/glfw3.h>
@@ -37,7 +38,7 @@ void TriApp::Init()
 
         for (size_t i = 0; i < numInstanceExtensions; i++)
         {
-            TriLogVerbose() << "- " << mInstanceExtensions[i].extensionName;
+            TriLogVerbose() << "  " << mInstanceExtensions[i].extensionName;
         }
 
         // Get extensions required from GLFW
@@ -88,7 +89,7 @@ void TriApp::Init()
 
         for (size_t i = 0; i < numLayers; i++)
         {
-            TriLogVerbose() << "- " << mInstanceLayers[i].layerName;
+            TriLogVerbose() << "  " << mInstanceLayers[i].layerName;
         }
 
         for (const char *reqLayer : reqLayers)
@@ -126,18 +127,24 @@ void TriApp::Init()
         createInfo.pNext = nullptr;
         createInfo.pApplicationInfo = &appInfo;
 
+        VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{};
+#if TRI_WITH_VULKAN_VALIDATION
+        PopulateDebugUtilsMessengerCreateInfoEXT(debugUtilsMessengerCreateInfo);
+        createInfo.pNext = &debugUtilsMessengerCreateInfo;
+#endif
+
         TriLogInfo() << "Number of requested instance extensions: "
                      << reqExtensions.size();
         for (size_t i = 0; i < reqExtensions.size(); i++)
         {
-            TriLogVerbose() << "- " << reqExtensions[i];
+            TriLogVerbose() << "  " << reqExtensions[i];
         }
 
         TriLogInfo() << "Number of requested instance layers: "
                      << reqLayers.size();
         for (size_t i = 0; i < reqLayers.size(); i++)
         {
-            TriLogVerbose() << "- " << reqLayers[i];
+            TriLogVerbose() << "  " << reqLayers[i];
         }
 
         createInfo.enabledExtensionCount = reqExtensions.size();
@@ -153,7 +160,7 @@ void TriApp::Init()
             return;
         }
 
-        TriLogVerbose() << "VkInstance created: " << mInstance;
+        TriLogInfo() << "VkInstance created: " << mInstance;
     }
 
     mLibrary.Init();
@@ -161,27 +168,10 @@ void TriApp::Init()
 #if TRI_WITH_VULKAN_VALIDATION
     if (!mDebugUtilsMessenger)
     {
-
         // Setup VkDebugUtilsMessenger
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-        createInfo.sType =
-            VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.pNext = nullptr;
-
-        createInfo.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-
-        createInfo.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-
-        createInfo.pfnUserCallback = TriApp::VKDebugCallback;
-        createInfo.pUserData = this;
-
+        PopulateDebugUtilsMessengerCreateInfoEXT(createInfo);
+        
         VkResult result = mLibrary.CreateDebugUtilsMessengerEXT(
             mInstance, &createInfo, nullptr, &mDebugUtilsMessenger);
 
@@ -192,6 +182,47 @@ void TriApp::Init()
         }
     }
 #endif
+
+    if (!mDevice)
+    {
+        uint32_t deviceCount = 0;
+        std::vector<VkPhysicalDevice> devices;
+        vkEnumeratePhysicalDevices(mInstance, &deviceCount, nullptr);
+        devices.resize(deviceCount);
+        vkEnumeratePhysicalDevices(mInstance, &deviceCount, devices.data());
+
+        TriLogInfo() << "Number of Vulkan-enabled devices: " << deviceCount;
+
+        std::vector<std::pair<int, VkPhysicalDevice> > suitableDevices;
+        
+        for (size_t i = 0; i < deviceCount; i++)
+        {
+            VkPhysicalDevice device = devices[i];
+            int score = RateDeviceSuitability(device);
+
+            if (score != 0)
+            {
+                suitableDevices.emplace_back(score, device);
+            }
+        }
+
+        if (suitableDevices.empty())
+        {
+            TriLogError() << "No available Vulkan-enabled GPUs found";
+            Finalize();
+        }
+
+        std::sort(suitableDevices.begin(), suitableDevices.end(),
+                  [](const auto &left, const auto &right)
+                  { return left.first < right.first; });
+
+        TriLogInfo() << "Number of suitable Vulkan-enabled devices: "
+            << suitableDevices.size();
+
+        mDevice = suitableDevices[0].second;
+
+        mQueueFamilyIndices = FindQueueFamilies();
+    }
 }
 
 void TriApp::Loop()
@@ -206,6 +237,12 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
+    if (mDevice)
+    {
+        // Vulkan will implicitly destroy the device during the destruction of VkInstance
+        mDevice = nullptr;
+    }
+    
     if (mDebugUtilsMessenger)
     {
         mLibrary.DestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger,
@@ -217,6 +254,7 @@ void TriApp::Finalize()
 
     if (mInstance)
     {
+        TriLogInfo() << "Finalizing VkInstance: " << mInstance;
         vkDestroyInstance(mInstance, nullptr);
         mInstance = nullptr;
     }
@@ -255,6 +293,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL TriApp::VKDebugCallback(
 
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
         TriLogError() << "[VK] " << pCallbackData->pMessage;
+#ifndef NDEBUG
+        std::abort();
+#endif
         break;
 
     default:
@@ -263,6 +304,102 @@ VKAPI_ATTR VkBool32 VKAPI_CALL TriApp::VKDebugCallback(
     }
 
     return VK_FALSE;
+}
+
+void TriApp::PopulateDebugUtilsMessengerCreateInfoEXT(
+    VkDebugUtilsMessengerCreateInfoEXT &createInfo)
+{
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.pNext = nullptr;
+
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+    createInfo.pfnUserCallback = TriApp::VKDebugCallback;
+    createInfo.pUserData = this;
+}
+
+int TriApp::RateDeviceSuitability(VkPhysicalDevice device)
+{
+    VkPhysicalDeviceProperties props;
+    VkPhysicalDeviceFeatures feats;
+    vkGetPhysicalDeviceProperties(device, &props);
+    vkGetPhysicalDeviceFeatures(device, &feats);
+
+    int score = 0;
+
+    switch (props.deviceType)
+    {
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        score = 1;
+        break;
+
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        score = 2;
+        break;
+
+    default:
+        score = 0;
+        break;
+    }
+
+    if (feats.geometryShader)
+        score *= 2;
+    
+    if (feats.tessellationShader)
+        score *= 2;
+    
+    if (score == 0)
+    {
+        TriLogWarning() << "Device '" << props.deviceName << "' unsuitable";
+    }
+    else
+    {
+        TriLogVerbose() << "Device '" << props.deviceName << "' has a score of " << score;
+    }
+
+    return score;
+}
+
+QueueFamilyIndices TriApp::FindQueueFamilies()
+{
+    QueueFamilyIndices indices;
+
+    // TODO(42): Something something locate queue families
+
+    uint32_t numQueueFamilies = 0;
+    std::vector<VkQueueFamilyProperties> queueFamilyProps;
+    
+    vkGetPhysicalDeviceQueueFamilyProperties(mDevice, &numQueueFamilies,
+                                             nullptr);
+    queueFamilyProps.resize(numQueueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(mDevice, &numQueueFamilies,
+                                             queueFamilyProps.data());
+
+    TriLogInfo() << "Queue family count: " << numQueueFamilies;
+
+    size_t i = 0;
+    for (const VkQueueFamilyProperties &prop : queueFamilyProps)
+    {
+        TriLogVerbose() << "Queue family #" << i << " flags: 0x" << std::hex
+            << prop.queueFlags << std::dec;
+
+        if (prop.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        i++;
+    }
+
+    return indices;
 }
 
 void TriApp::RenderFrame() {}

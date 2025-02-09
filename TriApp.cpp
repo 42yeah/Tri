@@ -183,7 +183,7 @@ void TriApp::Init()
     }
 #endif
 
-    if (!mDevice)
+    if (!mPhysicalDevice)
     {
         uint32_t deviceCount = 0;
         std::vector<VkPhysicalDevice> devices;
@@ -210,6 +210,7 @@ void TriApp::Init()
         {
             TriLogError() << "No available Vulkan-enabled GPUs found";
             Finalize();
+            return;
         }
 
         std::sort(suitableDevices.begin(), suitableDevices.end(),
@@ -219,9 +220,57 @@ void TriApp::Init()
         TriLogInfo() << "Number of suitable Vulkan-enabled devices: "
             << suitableDevices.size();
 
-        mDevice = suitableDevices[0].second;
+        mPhysicalDevice = suitableDevices[0].second;
+    }
 
+    if (!mDevice)
+    {
         mQueueFamilyIndices = FindQueueFamilies();
+
+        if (!mQueueFamilyIndices.IsComplete())
+        {
+            TriLogError() << "Incomplete queue family index list";
+            Finalize();
+            return;
+        }
+
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        float queuePriority = 1.0f;
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.pNext = nullptr;
+        queueCreateInfo.queueFamilyIndex = *mQueueFamilyIndices.graphicsFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        /* TODO(42): Query used features at RateDeviceSuitability and use them
+           over here - right now we don't use any feats
+        */
+        VkPhysicalDeviceFeatures deviceFeats{};
+
+        VkDeviceCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pNext = nullptr;
+        createInfo.queueCreateInfoCount = 1;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.pEnabledFeatures = &deviceFeats;
+        createInfo.enabledExtensionCount = 0;
+
+        // We are NOT going to enable validation layers for this one
+
+        VkResult result =
+            vkCreateDevice(mPhysicalDevice, &createInfo, nullptr, &mDevice);
+
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create logical Vulkan device";
+            Finalize();
+            return;
+        }
+
+        vkGetDeviceQueue(mDevice, *mQueueFamilyIndices.graphicsFamily, 0,
+                         &mGraphicsQueue);
+
+        TriLogInfo() << "Device created: " << mDevice << ", with graphics queue: " << mGraphicsQueue;
     }
 }
 
@@ -239,8 +288,14 @@ void TriApp::Finalize()
 {
     if (mDevice)
     {
-        // Vulkan will implicitly destroy the device during the destruction of VkInstance
+        vkDestroyDevice(mDevice, nullptr);
         mDevice = nullptr;
+    }
+
+    if (mPhysicalDevice)
+    {
+        // Vulkan will implicitly destroy the device during the destruction of VkInstance
+        mPhysicalDevice = nullptr;
     }
     
     if (mDebugUtilsMessenger)
@@ -372,15 +427,13 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
 {
     QueueFamilyIndices indices;
 
-    // TODO(42): Something something locate queue families
-
     uint32_t numQueueFamilies = 0;
     std::vector<VkQueueFamilyProperties> queueFamilyProps;
-    
-    vkGetPhysicalDeviceQueueFamilyProperties(mDevice, &numQueueFamilies,
+
+    vkGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &numQueueFamilies,
                                              nullptr);
     queueFamilyProps.resize(numQueueFamilies);
-    vkGetPhysicalDeviceQueueFamilyProperties(mDevice, &numQueueFamilies,
+    vkGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &numQueueFamilies,
                                              queueFamilyProps.data());
 
     TriLogInfo() << "Queue family count: " << numQueueFamilies;
@@ -397,6 +450,11 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
         }
 
         i++;
+
+        if (indices.IsComplete())
+        {
+            break;
+        }
     }
 
     return indices;

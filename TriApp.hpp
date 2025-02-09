@@ -17,7 +17,8 @@ public:
     TriApp(const std::string &appName, int width, int height)
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
-          mLibrary(), mDebugUtilsMessenger(nullptr), mDevice(nullptr)
+          mLibrary(), mDebugUtilsMessenger(nullptr), mPhysicalDevice(nullptr),
+          mDevice(nullptr)
     {
     }
 
@@ -28,7 +29,7 @@ public:
 
        1. Create Vulkan instance
        2. Setup debug utils messenger
-       3. Setup Vulkan physical device
+       3. Setup (pick) Vulkan physical device
     */
     void Init();
     void Loop();
@@ -71,6 +72,9 @@ private:
     VkDebugUtilsMessengerEXT mDebugUtilsMessenger;
 #endif
 
-    VkPhysicalDevice mDevice;
+    VkPhysicalDevice mPhysicalDevice;
     QueueFamilyIndices mQueueFamilyIndices;
+
+    VkDevice mDevice;
+    VkQueue mGraphicsQueue;
 };

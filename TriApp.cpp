@@ -7,6 +7,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <algorithm>
+#include <set>
 
 #include <cstdint>
 
@@ -15,10 +16,11 @@ void TriApp::Init()
     if (!mpWindow)
     {
         glfwInit();
-        mpWindow =
-            glfwCreateWindow(width, height, mAppName.c_str(), nullptr, nullptr);
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        mpWindow =
+            glfwCreateWindow(width, height, mAppName.c_str(), nullptr, nullptr);
+        
         glfwMakeContextCurrent(mpWindow);
     }
 
@@ -223,6 +225,22 @@ void TriApp::Init()
         mPhysicalDevice = suitableDevices[0].second;
     }
 
+    if (!mSurface)
+    {
+        // Create surface
+        VkResult result =
+            glfwCreateWindowSurface(mInstance, mpWindow, nullptr, &mSurface);
+
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create Vulkan window surface: " << result;
+            Finalize();
+            return;
+        }
+
+        TriLogInfo() << "Vulkan window surface created: " << mSurface;
+    }
+
     if (!mDevice)
     {
         mQueueFamilyIndices = FindQueueFamilies();
@@ -234,14 +252,27 @@ void TriApp::Init()
             return;
         }
 
-        VkDeviceQueueCreateInfo queueCreateInfo{};
-        float queuePriority = 1.0f;
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.pNext = nullptr;
-        queueCreateInfo.queueFamilyIndex = *mQueueFamilyIndices.graphicsFamily;
-        queueCreateInfo.queueCount = 1;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
+        std::set<uint32_t> uniqueQueueIndices{
+            *mQueueFamilyIndices.graphicsFamily,
+            *mQueueFamilyIndices.presentFamily};
 
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        
+        for (uint32_t index : uniqueQueueIndices)
+        {
+            VkDeviceQueueCreateInfo queueCreateInfo{};
+            float queuePriority = 1.0f;
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.pNext = nullptr;
+            queueCreateInfo.queueFamilyIndex = index;
+            queueCreateInfo.queueCount = 1;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.emplace_back(std::move(queueCreateInfo));
+        }
+
+        TriLogInfo() << "Number of unique queues (graphics + present): "
+            << queueCreateInfos.size();
+        
         /* TODO(42): Query used features at RateDeviceSuitability and use them
            over here - right now we don't use any feats
         */
@@ -250,8 +281,8 @@ void TriApp::Init()
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pNext = nullptr;
-        createInfo.queueCreateInfoCount = 1;
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = queueCreateInfos.size();
+        createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeats;
         createInfo.enabledExtensionCount = 0;
 
@@ -259,7 +290,7 @@ void TriApp::Init()
 
         VkResult result =
             vkCreateDevice(mPhysicalDevice, &createInfo, nullptr, &mDevice);
-
+        
         if (result != VK_SUCCESS)
         {
             TriLogError() << "Failed to create logical Vulkan device";
@@ -269,14 +300,20 @@ void TriApp::Init()
 
         vkGetDeviceQueue(mDevice, *mQueueFamilyIndices.graphicsFamily, 0,
                          &mGraphicsQueue);
+        vkGetDeviceQueue(mDevice, *mQueueFamilyIndices.presentFamily, 0,
+                         &mPresentQueue);
 
-        TriLogInfo() << "Device created: " << mDevice << ", with graphics queue: " << mGraphicsQueue;
+        TriLogInfo() << "Device created: " << mDevice
+                     << ", with graphics queue: " << mGraphicsQueue
+            << ", present queue: " << mPresentQueue;
     }
+
+    
 }
 
 void TriApp::Loop()
 {
-    while (!glfwWindowShouldClose(mpWindow))
+    while (mpWindow && !glfwWindowShouldClose(mpWindow))
     {
         glfwPollEvents();
         RenderFrame();
@@ -286,6 +323,18 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
+    if (mGraphicsQueue)
+        mGraphicsQueue = nullptr;
+
+    if (mPresentQueue)
+        mPresentQueue = nullptr;
+
+    if (mSurface)
+    {
+        vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
+        mSurface = nullptr;
+    }
+
     if (mDevice)
     {
         vkDestroyDevice(mDevice, nullptr);
@@ -447,6 +496,20 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
         if (prop.queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
             indices.graphicsFamily = i;
+        }
+
+        VkBool32 presentSupport = false;
+        VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(
+            mPhysicalDevice, i, mSurface, &presentSupport);
+        if (result == VK_SUCCESS)
+        {
+            indices.presentFamily = i;
+        }
+        else
+        {
+            TriLogWarning() << "Failed to get physical device surface support "
+                               "info for queue family index "
+                            << i;
         }
 
         i++;

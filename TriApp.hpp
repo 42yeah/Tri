@@ -18,7 +18,8 @@ public:
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
           mLibrary(), mDebugUtilsMessenger(nullptr), mPhysicalDevice(nullptr),
-          mDevice(nullptr)
+          mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
+          mSurface(nullptr)
     {
     }
 
@@ -77,4 +78,7 @@ private:
 
     VkDevice mDevice;
     VkQueue mGraphicsQueue;
+    VkQueue mPresentQueue;
+
+    VkSurfaceKHR mSurface;
 };

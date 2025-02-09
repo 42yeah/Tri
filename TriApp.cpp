@@ -21,6 +21,8 @@ void TriApp::Init()
         glfwMakeContextCurrent(mpWindow);
     }
 
+    std::vector<const char *> reqExtensions;
+
     if (mInstanceExtensions.empty())
     {
         uint32_t numInstanceExtensions = 0;
@@ -37,10 +39,38 @@ void TriApp::Init()
         {
             TriLogVerbose() << "- " << mInstanceExtensions[i].extensionName;
         }
+
+        // Get extensions required from GLFW
+        uint32_t glfwExtensionCount = 0;
+        const char **glfwExtensions =
+            glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        reqExtensions =
+            std::vector(glfwExtensions, glfwExtensions + glfwExtensionCount);
+#if TRI_WITH_VULKAN_VALIDATION
+        reqExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+
+        for (const char *reqExtension : reqExtensions)
+        {
+            auto position = std::find_if(
+                mInstanceExtensions.begin(), mInstanceExtensions.end(),
+                [&](const VkExtensionProperties &prop)
+                { return std::string(reqExtension) == prop.extensionName; });
+
+            if (position == mInstanceExtensions.end())
+            {
+                TriLogError() << "Missing instance extension: " << reqExtension;
+                Finalize();
+                return;
+            }
+        }
+
+        TriLogInfo() << "All required extensions found";
     }
 
     std::vector<const char *> reqLayers;
-    
+
     if (mInstanceLayers.empty())
     {
 #if TRI_WITH_VULKAN_VALIDATION
@@ -96,34 +126,22 @@ void TriApp::Init()
         createInfo.pNext = nullptr;
         createInfo.pApplicationInfo = &appInfo;
 
-        // Get extensions required from GLFW
-        uint32_t glfwExtensionCount = 0;
-        const char **glfwExtensions =
-            glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        std::vector<const char *> instanceExtensions(
-            glfwExtensions, glfwExtensions + glfwExtensionCount);
-#if TRI_WITH_VULKAN_VALIDATION
-        instanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-
-#endif
-
-        TriLogVerbose() << "Number of instance extensions: "
-                        << instanceExtensions.size();
-        for (size_t i = 0; i < instanceExtensions.size(); i++)
+        TriLogInfo() << "Number of requested instance extensions: "
+                     << reqExtensions.size();
+        for (size_t i = 0; i < reqExtensions.size(); i++)
         {
-            TriLogVerbose() << "- " << instanceExtensions[i];
+            TriLogVerbose() << "- " << reqExtensions[i];
         }
 
-        TriLogVerbose() << "Number of instance layers: "
-                        << reqLayers.size();
+        TriLogInfo() << "Number of requested instance layers: "
+                     << reqLayers.size();
         for (size_t i = 0; i < reqLayers.size(); i++)
         {
             TriLogVerbose() << "- " << reqLayers[i];
         }
 
-        createInfo.enabledExtensionCount = instanceExtensions.size();
-        createInfo.ppEnabledExtensionNames = instanceExtensions.data();
+        createInfo.enabledExtensionCount = reqExtensions.size();
+        createInfo.ppEnabledExtensionNames = reqExtensions.data();
         createInfo.enabledLayerCount = reqLayers.size();
         createInfo.ppEnabledLayerNames = reqLayers.data();
 
@@ -196,7 +214,7 @@ void TriApp::Finalize()
     }
 
     mLibrary.Finalize();
-    
+
     if (mInstance)
     {
         vkDestroyInstance(mInstance, nullptr);

@@ -69,7 +69,7 @@ void TriApp::Init()
             }
         }
 
-        TriLogInfo() << "All required extensions found";
+        TriLogInfo() << "All required instance extensions found";
     }
 
     std::vector<const char *> reqLayers;
@@ -257,11 +257,12 @@ void TriApp::Init()
             *mQueueFamilyIndices.presentFamily};
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+
+        float queuePriority = 1.0f;
         
         for (uint32_t index : uniqueQueueIndices)
         {
             VkDeviceQueueCreateInfo queueCreateInfo{};
-            float queuePriority = 1.0f;
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.pNext = nullptr;
             queueCreateInfo.queueFamilyIndex = index;
@@ -278,13 +279,45 @@ void TriApp::Init()
         */
         VkPhysicalDeviceFeatures deviceFeats{};
 
+        // Device extensions
+        uint32_t numDeviceExtensions = 0;
+        vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr,
+                                             &numDeviceExtensions, nullptr);
+        mDeviceExtensions.resize(numDeviceExtensions);
+        vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr,
+                                             &numDeviceExtensions,
+                                             mDeviceExtensions.data());
+
+        std::vector<const char *> reqExtensions{
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+        for (const char *extension : reqExtensions)
+        {
+            auto position = std::find_if(
+                mDeviceExtensions.begin(), mDeviceExtensions.end(),
+                [&](const VkExtensionProperties &props)
+                { return std::string(extension) == props.extensionName; });
+            
+            if (position == mDeviceExtensions.end())
+            {
+                TriLogError()
+                    << "Missing required device extension: " << extension;
+                Finalize();
+                return;
+            }
+        }
+
+        TriLogInfo() << "All required device extensions found";
+        
+        // Create device
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pNext = nullptr;
         createInfo.queueCreateInfoCount = queueCreateInfos.size();
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeats;
-        createInfo.enabledExtensionCount = 0;
+        createInfo.enabledExtensionCount = reqExtensions.size();
+        createInfo.ppEnabledExtensionNames = reqExtensions.data();
 
         // We are NOT going to enable validation layers for this one
 
@@ -305,10 +338,8 @@ void TriApp::Init()
 
         TriLogInfo() << "Device created: " << mDevice
                      << ", with graphics queue: " << mGraphicsQueue
-            << ", present queue: " << mPresentQueue;
+                     << ", present queue: " << mPresentQueue;
     }
-
-    
 }
 
 void TriApp::Loop()
@@ -370,6 +401,8 @@ void TriApp::Finalize()
         mpWindow = nullptr;
     }
 
+    mDeviceExtensions.clear();
+    
     mInstanceExtensions.clear();
     mInstanceLayers.clear();
 }

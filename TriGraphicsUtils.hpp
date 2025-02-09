@@ -1,6 +1,9 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 #include <optional>
+#include <vector>
 
 #include <cstdint>
 
@@ -13,4 +16,11 @@ struct QueueFamilyIndices
     {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
+};
+
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
 };

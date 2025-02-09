@@ -31,6 +31,7 @@ public:
        1. Create Vulkan instance
        2. Setup debug utils messenger
        3. Setup (pick) Vulkan physical device
+       4. Setup logical Vulkan device
     */
     void Init();
     void Loop();
@@ -47,9 +48,12 @@ private:
     void PopulateDebugUtilsMessengerCreateInfoEXT(
         VkDebugUtilsMessengerCreateInfoEXT &createInfo);
 
-    int RateDeviceSuitability(VkPhysicalDevice device);
+    int RateDeviceSuitability(VkPhysicalDevice device,
+                              const std::vector<const char *> &reqExtensions);
 
     QueueFamilyIndices FindQueueFamilies();
+
+    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
     
     void RenderFrame();
 

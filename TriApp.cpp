@@ -20,11 +20,11 @@ void TriApp::Init()
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         mpWindow =
             glfwCreateWindow(width, height, mAppName.c_str(), nullptr, nullptr);
-        
+
         glfwMakeContextCurrent(mpWindow);
     }
 
-    std::vector<const char *> reqExtensions;
+    std::vector<const char *> reqInstanceExtensions;
 
     if (mInstanceExtensions.empty())
     {
@@ -48,13 +48,13 @@ void TriApp::Init()
         const char **glfwExtensions =
             glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-        reqExtensions =
+        reqInstanceExtensions =
             std::vector(glfwExtensions, glfwExtensions + glfwExtensionCount);
 #if TRI_WITH_VULKAN_VALIDATION
-        reqExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        reqInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
-        for (const char *reqExtension : reqExtensions)
+        for (const char *reqExtension : reqInstanceExtensions)
         {
             auto position = std::find_if(
                 mInstanceExtensions.begin(), mInstanceExtensions.end(),
@@ -136,10 +136,10 @@ void TriApp::Init()
 #endif
 
         TriLogInfo() << "Number of requested instance extensions: "
-                     << reqExtensions.size();
-        for (size_t i = 0; i < reqExtensions.size(); i++)
+                     << reqInstanceExtensions.size();
+        for (size_t i = 0; i < reqInstanceExtensions.size(); i++)
         {
-            TriLogVerbose() << "  " << reqExtensions[i];
+            TriLogVerbose() << "  " << reqInstanceExtensions[i];
         }
 
         TriLogInfo() << "Number of requested instance layers: "
@@ -149,8 +149,8 @@ void TriApp::Init()
             TriLogVerbose() << "  " << reqLayers[i];
         }
 
-        createInfo.enabledExtensionCount = reqExtensions.size();
-        createInfo.ppEnabledExtensionNames = reqExtensions.data();
+        createInfo.enabledExtensionCount = reqInstanceExtensions.size();
+        createInfo.ppEnabledExtensionNames = reqInstanceExtensions.data();
         createInfo.enabledLayerCount = reqLayers.size();
         createInfo.ppEnabledLayerNames = reqLayers.data();
 
@@ -173,7 +173,7 @@ void TriApp::Init()
         // Setup VkDebugUtilsMessenger
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
         PopulateDebugUtilsMessengerCreateInfoEXT(createInfo);
-        
+
         VkResult result = mLibrary.CreateDebugUtilsMessengerEXT(
             mInstance, &createInfo, nullptr, &mDebugUtilsMessenger);
 
@@ -185,6 +185,27 @@ void TriApp::Init()
     }
 #endif
 
+    if (!mSurface)
+    {
+        // Create surface
+        VkResult result =
+            glfwCreateWindowSurface(mInstance, mpWindow, nullptr, &mSurface);
+
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create Vulkan window surface: "
+                          << result;
+            Finalize();
+            return;
+        }
+
+        TriLogInfo() << "Vulkan window surface created: " << mSurface;
+    }
+    
+    // Device extensions
+    std::vector<const char *> reqDeviceExtensions{
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
     if (!mPhysicalDevice)
     {
         uint32_t deviceCount = 0;
@@ -195,12 +216,12 @@ void TriApp::Init()
 
         TriLogInfo() << "Number of Vulkan-enabled devices: " << deviceCount;
 
-        std::vector<std::pair<int, VkPhysicalDevice> > suitableDevices;
-        
+        std::vector<std::pair<int, VkPhysicalDevice>> suitableDevices;
+
         for (size_t i = 0; i < deviceCount; i++)
         {
             VkPhysicalDevice device = devices[i];
-            int score = RateDeviceSuitability(device);
+            int score = RateDeviceSuitability(device, reqDeviceExtensions);
 
             if (score != 0)
             {
@@ -220,25 +241,9 @@ void TriApp::Init()
                   { return left.first < right.first; });
 
         TriLogInfo() << "Number of suitable Vulkan-enabled devices: "
-            << suitableDevices.size();
+                     << suitableDevices.size();
 
         mPhysicalDevice = suitableDevices[0].second;
-    }
-
-    if (!mSurface)
-    {
-        // Create surface
-        VkResult result =
-            glfwCreateWindowSurface(mInstance, mpWindow, nullptr, &mSurface);
-
-        if (result != VK_SUCCESS)
-        {
-            TriLogError() << "Failed to create Vulkan window surface: " << result;
-            Finalize();
-            return;
-        }
-
-        TriLogInfo() << "Vulkan window surface created: " << mSurface;
     }
 
     if (!mDevice)
@@ -259,7 +264,7 @@ void TriApp::Init()
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
         float queuePriority = 1.0f;
-        
+
         for (uint32_t index : uniqueQueueIndices)
         {
             VkDeviceQueueCreateInfo queueCreateInfo{};
@@ -272,43 +277,13 @@ void TriApp::Init()
         }
 
         TriLogInfo() << "Number of unique queues (graphics + present): "
-            << queueCreateInfos.size();
-        
+                     << queueCreateInfos.size();
+
         /* TODO(42): Query used features at RateDeviceSuitability and use them
            over here - right now we don't use any feats
         */
         VkPhysicalDeviceFeatures deviceFeats{};
 
-        // Device extensions
-        uint32_t numDeviceExtensions = 0;
-        vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr,
-                                             &numDeviceExtensions, nullptr);
-        mDeviceExtensions.resize(numDeviceExtensions);
-        vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr,
-                                             &numDeviceExtensions,
-                                             mDeviceExtensions.data());
-
-        std::vector<const char *> reqExtensions{
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-        for (const char *extension : reqExtensions)
-        {
-            auto position = std::find_if(
-                mDeviceExtensions.begin(), mDeviceExtensions.end(),
-                [&](const VkExtensionProperties &props)
-                { return std::string(extension) == props.extensionName; });
-            
-            if (position == mDeviceExtensions.end())
-            {
-                TriLogError()
-                    << "Missing required device extension: " << extension;
-                Finalize();
-                return;
-            }
-        }
-
-        TriLogInfo() << "All required device extensions found";
-        
         // Create device
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -316,14 +291,14 @@ void TriApp::Init()
         createInfo.queueCreateInfoCount = queueCreateInfos.size();
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeats;
-        createInfo.enabledExtensionCount = reqExtensions.size();
-        createInfo.ppEnabledExtensionNames = reqExtensions.data();
+        createInfo.enabledExtensionCount = reqDeviceExtensions.size();
+        createInfo.ppEnabledExtensionNames = reqDeviceExtensions.data();
 
         // We are NOT going to enable validation layers for this one
 
         VkResult result =
             vkCreateDevice(mPhysicalDevice, &createInfo, nullptr, &mDevice);
-        
+
         if (result != VK_SUCCESS)
         {
             TriLogError() << "Failed to create logical Vulkan device";
@@ -374,10 +349,11 @@ void TriApp::Finalize()
 
     if (mPhysicalDevice)
     {
-        // Vulkan will implicitly destroy the device during the destruction of VkInstance
+        // Vulkan will implicitly destroy the device during the destruction of
+        // VkInstance
         mPhysicalDevice = nullptr;
     }
-    
+
     if (mDebugUtilsMessenger)
     {
         mLibrary.DestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger,
@@ -402,7 +378,7 @@ void TriApp::Finalize()
     }
 
     mDeviceExtensions.clear();
-    
+
     mInstanceExtensions.clear();
     mInstanceLayers.clear();
 }
@@ -463,12 +439,52 @@ void TriApp::PopulateDebugUtilsMessengerCreateInfoEXT(
     createInfo.pUserData = this;
 }
 
-int TriApp::RateDeviceSuitability(VkPhysicalDevice device)
+int TriApp::RateDeviceSuitability(
+    VkPhysicalDevice device, const std::vector<const char *> &reqExtensions)
 {
     VkPhysicalDeviceProperties props;
     VkPhysicalDeviceFeatures feats;
     vkGetPhysicalDeviceProperties(device, &props);
     vkGetPhysicalDeviceFeatures(device, &feats);
+
+    uint32_t numDeviceExtensions = 0;
+    vkEnumerateDeviceExtensionProperties(device, nullptr,
+                                         &numDeviceExtensions, nullptr);
+    mDeviceExtensions.resize(numDeviceExtensions);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &numDeviceExtensions,
+                                         mDeviceExtensions.data());
+
+    // TODO(42): Manually add swap chain support check here (even if it is
+    // missing)
+
+    for (const char *extension : reqExtensions)
+    {
+        auto position = std::find_if(
+            mDeviceExtensions.begin(), mDeviceExtensions.end(),
+            [&](const VkExtensionProperties &props)
+            { return std::string(extension) == props.extensionName; });
+
+        if (position == mDeviceExtensions.end())
+        {
+            TriLogError() << "Device '" << props.deviceName
+                          << "' is missing required device extension: "
+                          << extension;
+            return 0;
+        }
+    }
+
+    TriLogVerbose() << "All required device extensions found for device '"
+        << props.deviceName << "'";
+
+    SwapChainSupportDetails details = QuerySwapChainSupport(device);
+
+    if (details.formats.empty() || details.presentModes.empty())
+    {
+        // The swap chain cannot be presented
+        TriLogWarning() << "Device does not support swap chain with any "
+            "formats/present modes";
+        return 0;
+    }
 
     int score = 0;
 
@@ -489,7 +505,7 @@ int TriApp::RateDeviceSuitability(VkPhysicalDevice device)
 
     if (feats.geometryShader)
         score *= 2;
-    
+
     if (feats.tessellationShader)
         score *= 2;
     
@@ -499,7 +515,8 @@ int TriApp::RateDeviceSuitability(VkPhysicalDevice device)
     }
     else
     {
-        TriLogVerbose() << "Device '" << props.deviceName << "' has a score of " << score;
+        TriLogVerbose() << "Device '" << props.deviceName << "' has a score of "
+                        << score;
     }
 
     return score;
@@ -507,7 +524,7 @@ int TriApp::RateDeviceSuitability(VkPhysicalDevice device)
 
 QueueFamilyIndices TriApp::FindQueueFamilies()
 {
-    QueueFamilyIndices indices;
+    QueueFamilyIndices indices{};
 
     uint32_t numQueueFamilies = 0;
     std::vector<VkQueueFamilyProperties> queueFamilyProps;
@@ -524,7 +541,7 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
     for (const VkQueueFamilyProperties &prop : queueFamilyProps)
     {
         TriLogVerbose() << "Queue family #" << i << " flags: 0x" << std::hex
-            << prop.queueFlags << std::dec;
+                        << prop.queueFlags << std::dec;
 
         if (prop.queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
@@ -554,6 +571,34 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
     }
 
     return indices;
+}
+
+SwapChainSupportDetails TriApp::QuerySwapChainSupport(VkPhysicalDevice physicalDevice)
+{
+    SwapChainSupportDetails details{};
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        physicalDevice, mSurface, &details.capabilities);
+
+    uint32_t numFormats = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, mSurface, &numFormats,
+                                         nullptr);
+    details.formats.resize(numFormats);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, mSurface, &numFormats,
+                                         details.formats.data());
+
+    if (details.formats.empty())
+    {
+        TriLogWarning() << "No surface formats available for device";
+    }
+
+    uint32_t numPresentModes = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface,
+                                              &numPresentModes, nullptr);
+    details.presentModes.resize(numPresentModes);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface, &numPresentModes, details.presentModes.data());
+
+    return details;
 }
 
 void TriApp::RenderFrame() {}

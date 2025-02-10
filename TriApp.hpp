@@ -19,7 +19,9 @@ public:
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
           mLibrary(), mDebugUtilsMessenger(nullptr), mPhysicalDevice(nullptr),
           mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
-          mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr)
+          mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr),
+          mSurfaceFormat(), mPresentMode(VK_PRESENT_MODE_FIFO_KHR),
+          mSwapExtent(), mSwapChainImages()
     {
     }
 
@@ -97,4 +99,8 @@ private:
     std::vector<VkExtensionProperties> mDeviceExtensions;
 
     VkSwapchainKHR mSwapChain;
+    VkSurfaceFormatKHR mSurfaceFormat;
+    VkPresentModeKHR mPresentMode;
+    VkExtent2D mSwapExtent;
+    std::vector<VkImage> mSwapChainImages;
 };

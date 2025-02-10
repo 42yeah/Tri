@@ -325,11 +325,91 @@ void TriApp::Init()
     if (!mSwapChain)
     {
         // TODO(42): Do something about swap chains
+
+        SwapChainSupportDetails details = QuerySwapChainSupport(mPhysicalDevice);
+
+        mSurfaceFormat = ChooseSwapSurfaceFormat(details.formats);
+        mPresentMode = ChooseSwapPresentMode(details.presentModes);
+        mSwapExtent = ChooseSwapExtent(details.capabilities);
+
+        const VkSurfaceCapabilitiesKHR &capabilities =
+            details.capabilities;
+
+        // How many images before the producer queue becomes full
+        uint32_t imageCount = capabilities.minImageCount;
+        uint32_t maxImageCount = capabilities.maxImageCount;
+        if (maxImageCount != 0)
+        {
+            imageCount = glm::clamp(imageCount, imageCount + 1, maxImageCount);
+        }
+
+        VkSwapchainCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.pNext = nullptr;
+        createInfo.surface = mSurface;
+        createInfo.minImageCount = imageCount;
+        createInfo.imageFormat = mSurfaceFormat.format;
+        createInfo.imageColorSpace = mSurfaceFormat.colorSpace;
+        createInfo.imageExtent = mSwapExtent;
+        createInfo.imageArrayLayers = 1;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        uint32_t queueIndicies[2] = {*mQueueFamilyIndices.graphicsFamily,
+                                     *mQueueFamilyIndices.presentFamily};
+
+        if (queueIndicies[0] == queueIndicies[1])
+        {
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            createInfo.queueFamilyIndexCount = 1;
+        }
+        else
+        {
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            createInfo.queueFamilyIndexCount = 2;
+        }
+
+        createInfo.pQueueFamilyIndices = queueIndicies;
+
+        // No transforms, thank you very much
+        createInfo.preTransform = capabilities.currentTransform;
+
+        // Do not blend
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+        createInfo.presentMode = mPresentMode;
+        createInfo.clipped = true;
+
+        createInfo.oldSwapchain = nullptr;
+
+        VkResult result =
+            vkCreateSwapchainKHR(mDevice, &createInfo, nullptr, &mSwapChain);
+
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create swap chain";
+            Finalize();
+            return;
+        }
+
+        TriLogInfo() << "Swap chain created: " << mSwapChain;
+
+        // Retrieve swap chain images
+        uint32_t numSwapChainImages = 0;
+        vkGetSwapchainImagesKHR(mDevice, mSwapChain, &numSwapChainImages,
+                                nullptr);
+        mSwapChainImages.resize(numSwapChainImages);
+        vkGetSwapchainImagesKHR(mDevice, mSwapChain, &numSwapChainImages,
+                                mSwapChainImages.data());
+
+        TriLogInfo() << "Number of swap chain images: " << numSwapChainImages;
+        
     }
 }
 
 void TriApp::Loop()
 {
+    return; // TODO(42): Remove this thing
+    
     while (mpWindow && !glfwWindowShouldClose(mpWindow))
     {
         glfwPollEvents();
@@ -342,7 +422,8 @@ void TriApp::Finalize()
 {
     if (mSwapChain)
     {
-        // TODO(42): Destroy the swap chain
+        vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);
+        mSwapChain = nullptr;
     }
 
     if (mGraphicsQueue)

@@ -19,7 +19,7 @@ public:
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
           mLibrary(), mDebugUtilsMessenger(nullptr), mPhysicalDevice(nullptr),
           mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
-          mSurface(nullptr), mDeviceExtensions()
+          mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr)
     {
     }
 
@@ -54,7 +54,15 @@ private:
     QueueFamilyIndices FindQueueFamilies();
 
     SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
-    
+
+    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(
+        const std::vector<VkSurfaceFormatKHR> &availableFormats);
+
+    VkPresentModeKHR
+    ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &presentModes);
+
+    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
+
     void RenderFrame();
 
 private:
@@ -85,6 +93,8 @@ private:
     VkQueue mPresentQueue;
 
     VkSurfaceKHR mSurface;
-    
+
     std::vector<VkExtensionProperties> mDeviceExtensions;
+
+    VkSwapchainKHR mSwapChain;
 };

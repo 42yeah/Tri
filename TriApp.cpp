@@ -3,16 +3,19 @@
 #include "TriGraphicsUtils.hpp"
 #include "TriLog.hpp"
 
+#include <glm/glm.hpp>
+
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
 
 #include <algorithm>
-#include <set>
-
 #include <cstdint>
+#include <limits>
+#include <set>
 
 void TriApp::Init()
 {
+    // Initialize GLFW window
     if (!mpWindow)
     {
         glfwInit();
@@ -26,6 +29,7 @@ void TriApp::Init()
 
     std::vector<const char *> reqInstanceExtensions;
 
+    // Locate available instance extensions
     if (mInstanceExtensions.empty())
     {
         uint32_t numInstanceExtensions = 0;
@@ -74,6 +78,7 @@ void TriApp::Init()
 
     std::vector<const char *> reqLayers;
 
+    // Locate available instance layers
     if (mInstanceLayers.empty())
     {
 #if TRI_WITH_VULKAN_VALIDATION
@@ -112,9 +117,9 @@ void TriApp::Init()
         TriLogInfo() << "All required layers found";
     }
 
+    // Create Vulkan instance
     if (!mInstance)
     {
-        // Create Vulkan instance
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pNext = nullptr;
@@ -185,9 +190,9 @@ void TriApp::Init()
     }
 #endif
 
+    // Create GLFW window surface
     if (!mSurface)
     {
-        // Create surface
         VkResult result =
             glfwCreateWindowSurface(mInstance, mpWindow, nullptr, &mSurface);
 
@@ -201,8 +206,8 @@ void TriApp::Init()
 
         TriLogInfo() << "Vulkan window surface created: " << mSurface;
     }
-    
-    // Device extensions
+
+    // Pick physical device extensions
     std::vector<const char *> reqDeviceExtensions{
         VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -246,6 +251,7 @@ void TriApp::Init()
         mPhysicalDevice = suitableDevices[0].second;
     }
 
+    // Create Vulkan logical device & queues
     if (!mDevice)
     {
         mQueueFamilyIndices = FindQueueFamilies();
@@ -315,6 +321,11 @@ void TriApp::Init()
                      << ", with graphics queue: " << mGraphicsQueue
                      << ", present queue: " << mPresentQueue;
     }
+
+    if (!mSwapChain)
+    {
+        // TODO(42): Do something about swap chains
+    }
 }
 
 void TriApp::Loop()
@@ -329,6 +340,11 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
+    if (mSwapChain)
+    {
+        // TODO(42): Destroy the swap chain
+    }
+
     if (mGraphicsQueue)
         mGraphicsQueue = nullptr;
 
@@ -448,8 +464,8 @@ int TriApp::RateDeviceSuitability(
     vkGetPhysicalDeviceFeatures(device, &feats);
 
     uint32_t numDeviceExtensions = 0;
-    vkEnumerateDeviceExtensionProperties(device, nullptr,
-                                         &numDeviceExtensions, nullptr);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &numDeviceExtensions,
+                                         nullptr);
     mDeviceExtensions.resize(numDeviceExtensions);
     vkEnumerateDeviceExtensionProperties(device, nullptr, &numDeviceExtensions,
                                          mDeviceExtensions.data());
@@ -474,7 +490,7 @@ int TriApp::RateDeviceSuitability(
     }
 
     TriLogVerbose() << "All required device extensions found for device '"
-        << props.deviceName << "'";
+                    << props.deviceName << "'";
 
     SwapChainSupportDetails details = QuerySwapChainSupport(device);
 
@@ -482,7 +498,7 @@ int TriApp::RateDeviceSuitability(
     {
         // The swap chain cannot be presented
         TriLogWarning() << "Device does not support swap chain with any "
-            "formats/present modes";
+                           "formats/present modes";
         return 0;
     }
 
@@ -508,7 +524,7 @@ int TriApp::RateDeviceSuitability(
 
     if (feats.tessellationShader)
         score *= 2;
-    
+
     if (score == 0)
     {
         TriLogWarning() << "Device '" << props.deviceName << "' unsuitable";
@@ -573,12 +589,13 @@ QueueFamilyIndices TriApp::FindQueueFamilies()
     return indices;
 }
 
-SwapChainSupportDetails TriApp::QuerySwapChainSupport(VkPhysicalDevice physicalDevice)
+SwapChainSupportDetails
+TriApp::QuerySwapChainSupport(VkPhysicalDevice physicalDevice)
 {
     SwapChainSupportDetails details{};
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-        physicalDevice, mSurface, &details.capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, mSurface,
+                                              &details.capabilities);
 
     uint32_t numFormats = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, mSurface, &numFormats,
@@ -596,9 +613,66 @@ SwapChainSupportDetails TriApp::QuerySwapChainSupport(VkPhysicalDevice physicalD
     vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface,
                                               &numPresentModes, nullptr);
     details.presentModes.resize(numPresentModes);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface, &numPresentModes, details.presentModes.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface,
+                                              &numPresentModes,
+                                              details.presentModes.data());
 
     return details;
+}
+
+VkSurfaceFormatKHR TriApp::ChooseSwapSurfaceFormat(
+    const std::vector<VkSurfaceFormatKHR> &availableFormats)
+{
+    for (const VkSurfaceFormatKHR &format : availableFormats)
+    {
+        if (format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+            format.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)
+        {
+            return format;
+        }
+    }
+
+    // Just use the first one
+    return availableFormats[0];
+}
+
+VkPresentModeKHR
+TriApp::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &presentModes)
+{
+    // VK_PRESENT_MODE_FIFO_KHR is guaranteed to be available
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D
+TriApp::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
+{
+    uint32_t numericMax = std::numeric_limits<uint32_t>::max();
+    const VkExtent2D &currentExtent = capabilities.currentExtent;
+
+    if (currentExtent.width != numericMax && currentExtent.height != numericMax)
+    {
+        TriLogVerbose() << "Swap chain extent as specified by capabilities: "
+                        << currentExtent.width << ", " << currentExtent.height;
+        return currentExtent;
+    }
+
+    const VkExtent2D &minExtent = capabilities.minImageExtent;
+    const VkExtent2D &maxExtent = capabilities.maxImageExtent;
+
+    int fbWidth = 0;
+    int fbHeight = 0;
+    glfwGetFramebufferSize(mpWindow, &fbWidth, &fbHeight);
+
+    VkExtent2D ret{};
+    ret.width = glm::clamp(static_cast<uint32_t>(fbWidth), minExtent.width,
+                           maxExtent.width);
+    ret.height = glm::clamp(static_cast<uint32_t>(fbHeight), minExtent.width,
+                            maxExtent.height);
+
+    TriLogVerbose() << "Retrieved clamped GLFW frame buffer size: " << ret.width
+                    << ", " << ret.height;
+
+    return ret;
 }
 
 void TriApp::RenderFrame() {}

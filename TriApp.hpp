@@ -21,7 +21,7 @@ public:
           mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
           mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr),
           mSurfaceFormat(), mPresentMode(VK_PRESENT_MODE_FIFO_KHR),
-          mSwapExtent(), mSwapChainImages()
+          mSwapExtent(), mSwapChainImages(), mSwapChainImageViews()
     {
     }
 
@@ -103,4 +103,6 @@ private:
     VkPresentModeKHR mPresentMode;
     VkExtent2D mSwapExtent;
     std::vector<VkImage> mSwapChainImages;
+
+    std::vector<VkImageView> mSwapChainImageViews;
 };

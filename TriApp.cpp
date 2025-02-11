@@ -402,6 +402,40 @@ void TriApp::Init()
                                 mSwapChainImages.data());
 
         TriLogInfo() << "Number of swap chain images: " << numSwapChainImages;
+    }
+
+    if (mSwapChainImageViews.empty())
+    {
+        mSwapChainImageViews.resize(mSwapChainImages.size());
+        
+        for (size_t i = 0; i < mSwapChainImages.size(); i++)
+        {
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.pNext = nullptr;
+            createInfo.image = mSwapChainImages[i];
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createInfo.format = mSurfaceFormat.format;
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createInfo.subresourceRange.baseMipLevel = 0;
+            createInfo.subresourceRange.levelCount = 1;
+            createInfo.subresourceRange.baseArrayLayer = 0;
+            createInfo.subresourceRange.layerCount = 1;
+
+            VkResult result = vkCreateImageView(mDevice, &createInfo, nullptr,
+                                                &mSwapChainImageViews[i]);
+            if (result != VK_SUCCESS)
+            {
+                TriLogError() << "Failed to create swap chain image view";
+                Finalize();
+                return;
+            }
+        }
+        
         
     }
 }
@@ -420,6 +454,15 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
+    if (!mSwapChainImageViews.empty())
+    {
+        for (const VkImageView &imageView : mSwapChainImageViews)
+        {
+            vkDestroyImageView(mDevice, imageView, nullptr);
+        }
+        mSwapChainImageViews.clear();
+    }
+    
     if (mSwapChain)
     {
         vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TriGraphicsUtils.hpp"
+#include "TriConfig.hpp"
 #include "VkExtLibrary.hpp"
 
 #include <vulkan/vk_platform.h>
@@ -17,12 +18,15 @@ public:
     TriApp(const std::string &appName, int width, int height)
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
-          mLibrary(), mDebugUtilsMessenger(nullptr), mPhysicalDevice(nullptr),
+          mLibrary(), mPhysicalDevice(nullptr),
           mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
           mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr),
           mSurfaceFormat(), mPresentMode(VK_PRESENT_MODE_FIFO_KHR),
           mSwapExtent(), mSwapChainImages(), mSwapChainImageViews()
     {
+    #if TRI_WITH_VULKAN_VALIDATION
+        mDebugUtilsMessenger = nullptr;
+    #endif
     }
 
     ~TriApp() { Finalize(); }

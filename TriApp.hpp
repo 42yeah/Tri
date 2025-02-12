@@ -22,7 +22,8 @@ public:
           mGraphicsQueue(nullptr), mPresentQueue(nullptr), mSurface(nullptr),
           mDeviceExtensions(), mSwapChain(nullptr), mSurfaceFormat(),
           mPresentMode(VK_PRESENT_MODE_FIFO_KHR), mSwapExtent(),
-          mSwapChainImages(), mSwapChainImageViews(), mPipelineLayout(nullptr)
+          mSwapChainImages(), mSwapChainImageViews(), mRenderPass(nullptr),
+          mPipelineLayout(nullptr)
     {
     #if TRI_WITH_VULKAN_VALIDATION
         mDebugUtilsMessenger = nullptr;
@@ -41,7 +42,8 @@ public:
        5. Setup logical Vulkan device
        6. Setup swap chains
        7. Setup swap chain image views
-       8. Setup graphics pipeline
+       8. Setup render pass
+       9. Setup graphics pipeline
     */
     void Init();
     VkResult InitGraphicsPipeline();
@@ -117,6 +119,8 @@ private:
 
     std::vector<VkImageView> mSwapChainImageViews;
 
+    VkRenderPass mRenderPass;
+    
     VkPipelineLayout mPipelineLayout;
-
+    
 };

@@ -1,7 +1,5 @@
 #include "TriApp.hpp"
-#include "TriLog.hpp"
 
-#include <iostream>
 #include <memory>
 
 int main()

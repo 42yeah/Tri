@@ -36,10 +36,15 @@ public:
 
        1. Create Vulkan instance
        2. Setup debug utils messenger
-       3. Setup (pick) Vulkan physical device
-       4. Setup logical Vulkan device
+       3. Setup swap surface
+       4. Setup (pick) Vulkan physical device
+       5. Setup logical Vulkan device
+       6. Setup swap chains
+       7. Setup swap chain image views
+       8. Setup graphics pipeline
     */
     void Init();
+    VkResult InitGraphicsPipeline();
     void Loop();
     void Finalize();
 
@@ -68,6 +73,8 @@ private:
     ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &presentModes);
 
     VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
+
+    VkShaderModule CreateShaderModule(const std::vector<char> &svcBuffer);
 
     void RenderFrame();
 
@@ -109,4 +116,5 @@ private:
     std::vector<VkImage> mSwapChainImages;
 
     std::vector<VkImageView> mSwapChainImageViews;
+
 };

@@ -1,8 +1,10 @@
 #include "TriApp.hpp"
 
 #include "TriGraphicsUtils.hpp"
+#include "TriFileUtils.hpp"
 #include "TriLog.hpp"
 
+#include <cstddef>
 #include <glm/glm.hpp>
 
 #include <GLFW/glfw3.h>
@@ -435,9 +437,60 @@ void TriApp::Init()
                 return;
             }
         }
-        
-        
     }
+
+    // This is gonna be REALLY long so I am breaking it off into its own function
+    VkResult result = InitGraphicsPipeline();
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed during graphics pipeline initialization";
+        Finalize();
+        return;
+    }
+
+    
+}
+
+VkResult TriApp::InitGraphicsPipeline()
+{
+    std::optional<std::vector<char>> vertexShaderCode =
+        ReadBinaryFile("Shaders/triangle.vert.svc");
+    std::optional<std::vector<char>> fragmentShaderCode =
+        ReadBinaryFile("Shaders/triangle.frag.svc");
+
+    if (!vertexShaderCode.has_value() || !fragmentShaderCode.has_value())
+    {
+        TriLogError() << "Failed to create vertex/fragment shader(s)";
+        return VK_RESULT_MAX_ENUM;
+    }
+
+    VkShaderModule vertexShader = CreateShaderModule(*vertexShaderCode);
+    VkShaderModule fragmentShader = CreateShaderModule(*fragmentShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertexShaderCreateInfo{};
+    vertexShaderCreateInfo.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexShaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexShaderCreateInfo.pNext = nullptr;
+    vertexShaderCreateInfo.module = vertexShader;
+    vertexShaderCreateInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragmentShaderCreateInfo{};
+    fragmentShaderCreateInfo.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentShaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragmentShaderCreateInfo.pNext = nullptr;
+    fragmentShaderCreateInfo.module = fragmentShader;
+    fragmentShaderCreateInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo stages[] =
+        { vertexShaderCreateInfo, fragmentShaderCreateInfo };
+
+    vkDestroyShaderModule(mDevice, vertexShader, nullptr);
+    vkDestroyShaderModule(mDevice, fragmentShader, nullptr);
+
+    return VK_SUCCESS;
 }
 
 void TriApp::Loop()
@@ -799,6 +852,27 @@ TriApp::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
                     << ", " << ret.height;
 
     return ret;
+}
+
+VkShaderModule TriApp::CreateShaderModule(const std::vector<char> &svcBuffer)
+{
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.pNext = nullptr;
+    createInfo.codeSize = svcBuffer.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t *>(svcBuffer.data());
+
+    VkShaderModule shaderModule = nullptr;
+    VkResult result =
+        vkCreateShaderModule(mDevice, &createInfo, nullptr, &shaderModule);
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed during Vulkan shader module creation";
+        return nullptr;
+    }
+
+    return shaderModule;
 }
 
 void TriApp::RenderFrame() {}

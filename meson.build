@@ -27,7 +27,8 @@ conf.set('TRI_WITH_VULKAN_VALIDATION', use_vulkan_validation ? 1 : 0)
 conf.set('TRI_COLORED_LOG', get_option('colored_log') ? 1 : 0)
 configure_file(output : 'TriConfig.hpp', configuration : conf)
 
-executable('tri', ['main.cpp', 'TriApp.cpp', 'TriLog.cpp', 'VkExtLibrary.cpp'],
+executable('tri', ['main.cpp', 'TriApp.cpp', 'TriLog.cpp',
+                   'VkExtLibrary.cpp', 'TriFileUtils.cpp'],
            include_directories : vulkan_headers,
            dependencies : deps,
            cpp_args : tri_args)

@@ -1,7 +1,7 @@
 #include "TriApp.hpp"
 
-#include "TriGraphicsUtils.hpp"
 #include "TriFileUtils.hpp"
+#include "TriGraphicsUtils.hpp"
 #include "TriLog.hpp"
 
 #include <cstddef>
@@ -328,14 +328,14 @@ void TriApp::Init()
     {
         // TODO(42): Do something about swap chains
 
-        SwapChainSupportDetails details = QuerySwapChainSupport(mPhysicalDevice);
+        SwapChainSupportDetails details =
+            QuerySwapChainSupport(mPhysicalDevice);
 
         mSurfaceFormat = ChooseSwapSurfaceFormat(details.formats);
         mPresentMode = ChooseSwapPresentMode(details.presentModes);
         mSwapExtent = ChooseSwapExtent(details.capabilities);
 
-        const VkSurfaceCapabilitiesKHR &capabilities =
-            details.capabilities;
+        const VkSurfaceCapabilitiesKHR &capabilities = details.capabilities;
 
         // How many images before the producer queue becomes full
         uint32_t imageCount = capabilities.minImageCount;
@@ -409,7 +409,7 @@ void TriApp::Init()
     if (mSwapChainImageViews.empty())
     {
         mSwapChainImageViews.resize(mSwapChainImages.size());
-        
+
         for (size_t i = 0; i < mSwapChainImages.size(); i++)
         {
             VkImageViewCreateInfo createInfo{};
@@ -439,7 +439,8 @@ void TriApp::Init()
         }
     }
 
-    // This is gonna be REALLY long so I am breaking it off into its own function
+    // This is gonna be REALLY long so I am breaking it off into its own
+    // function
     VkResult result = InitGraphicsPipeline();
 
     if (result != VK_SUCCESS)
@@ -448,8 +449,6 @@ void TriApp::Init()
         Finalize();
         return;
     }
-
-    
 }
 
 VkResult TriApp::InitGraphicsPipeline()
@@ -468,6 +467,7 @@ VkResult TriApp::InitGraphicsPipeline()
     VkShaderModule vertexShader = CreateShaderModule(*vertexShaderCode);
     VkShaderModule fragmentShader = CreateShaderModule(*fragmentShaderCode);
 
+    // Vertex shader create info
     VkPipelineShaderStageCreateInfo vertexShaderCreateInfo{};
     vertexShaderCreateInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -476,6 +476,7 @@ VkResult TriApp::InitGraphicsPipeline()
     vertexShaderCreateInfo.module = vertexShader;
     vertexShaderCreateInfo.pName = "main";
 
+    // Fragment shader create info
     VkPipelineShaderStageCreateInfo fragmentShaderCreateInfo{};
     fragmentShaderCreateInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -484,8 +485,114 @@ VkResult TriApp::InitGraphicsPipeline()
     fragmentShaderCreateInfo.module = fragmentShader;
     fragmentShaderCreateInfo.pName = "main";
 
-    VkPipelineShaderStageCreateInfo stages[] =
-        { vertexShaderCreateInfo, fragmentShaderCreateInfo };
+    VkPipelineShaderStageCreateInfo stages[] = {vertexShaderCreateInfo,
+                                                fragmentShaderCreateInfo};
+
+    // Dynamic states
+    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo{};
+    dynamicStateCreateInfo.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicStateCreateInfo.pNext = nullptr;
+    dynamicStateCreateInfo.dynamicStateCount = dynamicStates.size();
+    dynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
+
+    // Pipeline vertex input state
+    VkPipelineVertexInputStateCreateInfo vertexCreateInfo{};
+    vertexCreateInfo.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexCreateInfo.pNext = nullptr;
+    vertexCreateInfo.vertexBindingDescriptionCount = 0;
+    vertexCreateInfo.pVertexBindingDescriptions = nullptr;
+    vertexCreateInfo.vertexAttributeDescriptionCount = 0;
+    vertexCreateInfo.pVertexAttributeDescriptions = nullptr;
+
+    // Input assembly
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.pNext = nullptr;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    // Viewport & scissor
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(mSwapExtent.width);
+    viewport.height = static_cast<float>(mSwapExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = mSwapExtent;
+
+    VkPipelineViewportStateCreateInfo viewportCreateInfo{};
+    viewportCreateInfo.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportCreateInfo.pNext = nullptr;
+    viewportCreateInfo.viewportCount = 1;
+    // viewportCreateInfo.pViewports = &viewport;
+    viewportCreateInfo.scissorCount = 1;
+    // viewportCreateInfo.pScissors = &scissor;
+
+    // Rasterizer
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.pNext = nullptr;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasClamp = 0.0f;
+    rasterizer.depthBiasSlopeFactor = 0.0f;
+
+    // Multisampling
+    // VkPipelineMultisampleStateCreateInfo multiSample{}; ...
+
+    // Color blending
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+    // Basically same as above
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    /* NOTE(42): Alternatively, use VkPipelineColorBlendStateCreateInfo for
+                 global color blending
+    */
+
+    VkPipelineLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.pNext = nullptr;
+    layoutCreateInfo.setLayoutCount = 0;
+    layoutCreateInfo.pSetLayouts = nullptr;
+    layoutCreateInfo.pushConstantRangeCount = 0;
+    layoutCreateInfo.pPushConstantRanges = nullptr;
+
+    if (!mPipelineLayout)
+    {
+        VkResult result = vkCreatePipelineLayout(mDevice, &layoutCreateInfo,
+                                                 nullptr, &mPipelineLayout);
+
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create VkPipelineLayout";
+        }    
+    }
 
     vkDestroyShaderModule(mDevice, vertexShader, nullptr);
     vkDestroyShaderModule(mDevice, fragmentShader, nullptr);
@@ -496,7 +603,7 @@ VkResult TriApp::InitGraphicsPipeline()
 void TriApp::Loop()
 {
     return; // TODO(42): Remove this thing
-    
+
     while (mpWindow && !glfwWindowShouldClose(mpWindow))
     {
         glfwPollEvents();
@@ -507,6 +614,12 @@ void TriApp::Loop()
 
 void TriApp::Finalize()
 {
+    if (mPipelineLayout)
+    {
+        vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
+        mPipelineLayout = nullptr;
+    }
+    
     if (!mSwapChainImageViews.empty())
     {
         for (const VkImageView &imageView : mSwapChainImageViews)
@@ -515,7 +628,7 @@ void TriApp::Finalize()
         }
         mSwapChainImageViews.clear();
     }
-    
+
     if (mSwapChain)
     {
         vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);

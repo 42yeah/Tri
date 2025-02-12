@@ -18,11 +18,11 @@ public:
     TriApp(const std::string &appName, int width, int height)
         : mpWindow(nullptr), mAppName(appName), width(width), height(height),
           mInstance(nullptr), mInstanceExtensions(), mInstanceLayers(),
-          mLibrary(), mPhysicalDevice(nullptr),
-          mDevice(nullptr), mGraphicsQueue(nullptr), mPresentQueue(nullptr),
-          mSurface(nullptr), mDeviceExtensions(), mSwapChain(nullptr),
-          mSurfaceFormat(), mPresentMode(VK_PRESENT_MODE_FIFO_KHR),
-          mSwapExtent(), mSwapChainImages(), mSwapChainImageViews()
+          mLibrary(), mPhysicalDevice(nullptr), mDevice(nullptr),
+          mGraphicsQueue(nullptr), mPresentQueue(nullptr), mSurface(nullptr),
+          mDeviceExtensions(), mSwapChain(nullptr), mSurfaceFormat(),
+          mPresentMode(VK_PRESENT_MODE_FIFO_KHR), mSwapExtent(),
+          mSwapChainImages(), mSwapChainImageViews(), mPipelineLayout(nullptr)
     {
     #if TRI_WITH_VULKAN_VALIDATION
         mDebugUtilsMessenger = nullptr;
@@ -116,5 +116,7 @@ private:
     std::vector<VkImage> mSwapChainImages;
 
     std::vector<VkImageView> mSwapChainImageViews;
+
+    VkPipelineLayout mPipelineLayout;
 
 };

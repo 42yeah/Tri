@@ -19,15 +19,39 @@ vulkan_headers = include_directories(vulkan_sdk_root + '/include')
 deps += vulkan_dep
 tri_args = []
 
-disable_validation = (get_option('buildtype') == 'debug' or
-                      get_option('vulkan_force_disable_validation'))
+use_vulkan_validation = (get_option('buildtype') == 'debug' or
+                         get_option('vulkan_force_disable_validation'))
 
-tri_args += '-DTRI_WITH_VULKAN_VALIDATION=@0@'.format(
-  disable_validation ? 1 : 0)
-tri_args += '-DTRI_COLORED_LOG=@0@'.format(
-  get_option('colored_log') == true ? 1 : 0)
+conf = configuration_data()
+conf.set('TRI_WITH_VULKAN_VALIDATION', use_vulkan_validation ? 1 : 0)
+conf.set('TRI_COLORED_LOG', get_option('colored_log') ? 1 : 0)
+configure_file(output : 'TriConfig.hpp', configuration : conf)
 
 executable('tri', ['main.cpp', 'TriApp.cpp', 'TriLog.cpp', 'VkExtLibrary.cpp'],
            include_directories : vulkan_headers,
            dependencies : deps,
            cpp_args : tri_args)
+
+# Try to check for glslc
+glslc = find_program('glslc', native : true, required : true)
+
+shader_output_dir = meson.current_build_dir() / 'Shaders'
+run_command('mkdir', '-p', shader_output_dir, check : true)
+
+# HACK(42): Somehow this must be present otherwise the folder will not be created
+#           before the custom targets
+message('mkdir @0@'.format(shader_output_dir))
+
+shaders = ['triangle.vert',
+           'triangle.frag']
+
+foreach shader : shaders 
+  custom_target('Shader @0@'.format(shader),
+                input: 'Shaders/@0@'.format(shader),
+                output : '@PLAINNAME@.svc',
+                command : [
+                  glslc, '@INPUT@', '-o', 'Shaders/@OUTPUT@'
+                ],
+               build_by_default : true)
+endforeach
+

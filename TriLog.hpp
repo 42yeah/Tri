@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <iostream>
 
 #define TRI_LOG_APP "Tri"

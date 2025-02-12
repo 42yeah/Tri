@@ -1,5 +1,7 @@
 #include "TriLog.hpp"
 
+#include "TriConfig.hpp"
+
 #if TRI_COLORED_LOG
 #define TRI_COLOR_VERBOSE "\x1b[90m"
 #define TRI_COLOR_INFO "\x1b[92m"

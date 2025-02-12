@@ -494,12 +494,14 @@ void TriApp::Finalize()
         mPhysicalDevice = nullptr;
     }
 
+#if TRI_WITH_VULKAN_VALIDATION
     if (mDebugUtilsMessenger)
     {
         mLibrary.DestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger,
                                                nullptr);
         mDebugUtilsMessenger = nullptr;
     }
+#endif
 
     mLibrary.Finalize();
 

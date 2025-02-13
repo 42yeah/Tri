@@ -4,7 +4,6 @@
 #include "TriGraphicsUtils.hpp"
 #include "TriLog.hpp"
 
-#include <cstddef>
 #include <glm/glm.hpp>
 
 #include <GLFW/glfw3.h>
@@ -460,6 +459,15 @@ void TriApp::Init()
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
 
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         createInfo.pNext = nullptr;
@@ -467,6 +475,8 @@ void TriApp::Init()
         createInfo.pAttachments = &colorAttachment;
         createInfo.subpassCount = 1;
         createInfo.pSubpasses = &subpass;
+        createInfo.dependencyCount = 1;
+        createInfo.pDependencies = &dependency;
 
         VkResult result =
             vkCreateRenderPass(mDevice, &createInfo, nullptr, &mRenderPass);
@@ -562,9 +572,6 @@ void TriApp::Init()
     VkSemaphoreCreateInfo semaCreateInfo{};
     semaCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     semaCreateInfo.pNext = nullptr;
-    VkFenceCreateInfo fenceCreateInfo{};
-    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceCreateInfo.pNext = nullptr;
 
     if (!mImageAvailableSemaphore)
     {
@@ -590,6 +597,11 @@ void TriApp::Init()
     }
     if (!mInFlightFence)
     {
+        VkFenceCreateInfo fenceCreateInfo{};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    
         VkResult result =
             vkCreateFence(mDevice, &fenceCreateInfo, nullptr, &mInFlightFence);
         if (result != VK_SUCCESS)
@@ -797,11 +809,15 @@ void TriApp::Loop()
     while (mpWindow && !glfwWindowShouldClose(mpWindow))
     {
         glfwPollEvents();
+        RenderFrame();
     }
 }
 
 void TriApp::Finalize()
 {
+    if (mDevice)
+        vkDeviceWaitIdle(mDevice);
+    
     if (mImageAvailableSemaphore)
     {
         vkDestroySemaphore(mDevice, mImageAvailableSemaphore, nullptr);
@@ -1240,6 +1256,7 @@ bool TriApp::RecordCommandBuffer(VkCommandBuffer commandBuffer,
     VkRenderPassBeginInfo renderPassBeginInfo{};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassBeginInfo.pNext = nullptr;
+    renderPassBeginInfo.renderPass = mRenderPass;
     renderPassBeginInfo.framebuffer = mFramebuffers[imageIndex];
     renderPassBeginInfo.renderArea.offset = {0, 0};
     renderPassBeginInfo.renderArea.extent = mSwapExtent;
@@ -1283,4 +1300,63 @@ bool TriApp::RecordCommandBuffer(VkCommandBuffer commandBuffer,
     return true;
 }
 
-void TriApp::RenderFrame() {}
+void TriApp::RenderFrame()
+{
+    uint64_t infinite = std::numeric_limits<uint64_t>::max();
+    vkWaitForFences(mDevice, 1, &mInFlightFence, true,
+                    infinite);
+    vkResetFences(mDevice, 1, &mInFlightFence);
+    
+    uint32_t imageIndex = 0;
+    vkAcquireNextImageKHR(mDevice, mSwapChain, infinite,
+                          mImageAvailableSemaphore, nullptr, &imageIndex);
+
+    TriLogVerbose() << "Draw one frame on swap chain image: #" << imageIndex;
+
+    // Though this may be unnecessary, it's better that we reset it
+    vkResetCommandBuffer(mCommandBuffer, 0);
+    RecordCommandBuffer(mCommandBuffer, imageIndex);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+
+    // Wait until swap chain image is available (signaled after
+    // vkAcquireNextImageKHR)
+    VkSemaphore waitSemaphores[] = {mImageAvailableSemaphore};
+    VkPipelineStageFlags waitStages[] = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &mCommandBuffer;
+
+    VkSemaphore signalSemaphore[] = {mRenderFinishedSemaphore};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphore;
+
+    VkResult result =
+        vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFence);
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed to submit command buffer to queue";
+        return;
+    }
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext = nullptr;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &mRenderFinishedSemaphore;
+
+    VkSwapchainKHR swapChains[] = {mSwapChain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = nullptr;
+
+    vkQueuePresentKHR(mPresentQueue, &presentInfo);
+}

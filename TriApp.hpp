@@ -23,7 +23,7 @@ public:
           mDeviceExtensions(), mSwapChain(nullptr), mSurfaceFormat(),
           mPresentMode(VK_PRESENT_MODE_FIFO_KHR), mSwapExtent(),
           mSwapChainImages(), mSwapChainImageViews(), mRenderPass(nullptr),
-          mPipelineLayout(nullptr)
+          mPipelineLayout(nullptr), mGraphicsPipeline(nullptr)
     {
     #if TRI_WITH_VULKAN_VALIDATION
         mDebugUtilsMessenger = nullptr;
@@ -122,5 +122,6 @@ private:
     VkRenderPass mRenderPass;
     
     VkPipelineLayout mPipelineLayout;
-    
+
+    VkPipeline mGraphicsPipeline;
 };

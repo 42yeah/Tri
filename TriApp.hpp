@@ -23,7 +23,10 @@ public:
           mDeviceExtensions(), mSwapChain(nullptr), mSurfaceFormat(),
           mPresentMode(VK_PRESENT_MODE_FIFO_KHR), mSwapExtent(),
           mSwapChainImages(), mSwapChainImageViews(), mRenderPass(nullptr),
-          mPipelineLayout(nullptr), mGraphicsPipeline(nullptr)
+          mPipelineLayout(nullptr), mGraphicsPipeline(nullptr), mFramebuffers(),
+          mCommandPool(nullptr), mCommandBuffer(nullptr),
+          mImageAvailableSemaphore(nullptr), mRenderFinishedSemaphore(nullptr),
+          mInFlightFence(nullptr)
     {
     #if TRI_WITH_VULKAN_VALIDATION
         mDebugUtilsMessenger = nullptr;
@@ -44,6 +47,8 @@ public:
        7. Setup swap chain image views
        8. Setup render pass
        9. Setup graphics pipeline
+       10. Setup framebuffers
+       11. Setup command buffer pool & command buffer
     */
     void Init();
     VkResult InitGraphicsPipeline();
@@ -77,6 +82,8 @@ private:
     VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
 
     VkShaderModule CreateShaderModule(const std::vector<char> &svcBuffer);
+
+    bool RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
     void RenderFrame();
 
@@ -124,4 +131,14 @@ private:
     VkPipelineLayout mPipelineLayout;
 
     VkPipeline mGraphicsPipeline;
+
+    std::vector<VkFramebuffer> mFramebuffers;
+
+    VkCommandPool mCommandPool;
+    VkCommandBuffer mCommandBuffer;
+
+    // Synchronization entities
+    VkSemaphore mImageAvailableSemaphore;
+    VkSemaphore mRenderFinishedSemaphore;
+    VkFence mInFlightFence;
 };

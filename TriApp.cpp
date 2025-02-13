@@ -25,8 +25,6 @@ void TriApp::Init()
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         mpWindow =
             glfwCreateWindow(width, height, mAppName.c_str(), nullptr, nullptr);
-
-        glfwMakeContextCurrent(mpWindow);
     }
 
     std::vector<const char *> reqInstanceExtensions;
@@ -491,6 +489,116 @@ void TriApp::Init()
         Finalize();
         return;
     }
+
+    if (mFramebuffers.empty())
+    {
+        mFramebuffers.resize(mSwapChainImageViews.size());
+        for (size_t i = 0; i < mSwapChainImageViews.size(); i++)
+        {
+            // Create a framebuffer for each swap chain image view
+            VkImageView attachments[] = {mSwapChainImageViews[i]};
+
+            VkFramebufferCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            createInfo.pNext = nullptr;
+            createInfo.renderPass = mRenderPass;
+            createInfo.attachmentCount = 1;
+            createInfo.pAttachments = attachments;
+            createInfo.width = mSwapExtent.width;
+            createInfo.height = mSwapExtent.height;
+            createInfo.layers = 1;
+
+            VkResult result = vkCreateFramebuffer(mDevice, &createInfo, nullptr,
+                                                  &mFramebuffers[i]);
+
+            if (result != VK_SUCCESS)
+            {
+                TriLogError()
+                    << "Failed during swap chain creation (" << i << ")";
+                Finalize();
+                return;
+            }
+        }
+
+        TriLogInfo() << "Number of framebuffers created: "
+                     << mFramebuffers.size();
+    }
+
+    if (!mCommandPool)
+    {
+        VkCommandPoolCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        createInfo.pNext = nullptr;
+        createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        createInfo.queueFamilyIndex = *mQueueFamilyIndices.graphicsFamily;
+
+        VkResult result =
+            vkCreateCommandPool(mDevice, &createInfo, nullptr, &mCommandPool);
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create command pool";
+            Finalize();
+            return;
+        }
+
+        // Allocate ONE (1) single command buffer
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.pNext = nullptr;
+        allocInfo.commandPool = mCommandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        result = vkAllocateCommandBuffers(mDevice, &allocInfo, &mCommandBuffer);
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to allocate command buffer";
+            Finalize();
+            return;
+        }
+    }
+
+    // Create synchronization objects/entities
+    VkSemaphoreCreateInfo semaCreateInfo{};
+    semaCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaCreateInfo.pNext = nullptr;
+    VkFenceCreateInfo fenceCreateInfo{};
+    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCreateInfo.pNext = nullptr;
+
+    if (!mImageAvailableSemaphore)
+    {
+        VkResult result = vkCreateSemaphore(mDevice, &semaCreateInfo, nullptr,
+                                            &mImageAvailableSemaphore);
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create image available semaphore";
+            Finalize();
+            return;
+        }
+    }
+    if (!mRenderFinishedSemaphore)
+    {
+        VkResult result = vkCreateSemaphore(mDevice, &semaCreateInfo, nullptr,
+                                            &mRenderFinishedSemaphore);
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create render finished semaphore";
+            Finalize();
+            return;
+        }
+    }
+    if (!mInFlightFence)
+    {
+        VkResult result =
+            vkCreateFence(mDevice, &fenceCreateInfo, nullptr, &mInFlightFence);
+        if (result != VK_SUCCESS)
+        {
+            TriLogError() << "Failed to create in-flight fence";
+            Finalize();
+            return;
+        }
+    }
 }
 
 VkResult TriApp::InitGraphicsPipeline()
@@ -559,18 +667,8 @@ VkResult TriApp::InitGraphicsPipeline()
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-    // Viewport & scissor
-    // VkViewport viewport{};
-    // viewport.x = 0.0f;
-    // viewport.y = 0.0f;
-    // viewport.width = static_cast<float>(mSwapExtent.width);
-    // viewport.height = static_cast<float>(mSwapExtent.height);
-    // viewport.minDepth = 0.0f;
-    // viewport.maxDepth = 1.0f;
-
-    // VkRect2D scissor{};
-    // scissor.offset = {0, 0};
-    // scissor.extent = mSwapExtent;
+    // Viewport & scissor (if fixed)
+    // VkViewport viewport{}; ...
 
     VkPipelineViewportStateCreateInfo viewportCreateInfo{};
     viewportCreateInfo.sType =
@@ -635,7 +733,7 @@ VkResult TriApp::InitGraphicsPipeline()
     colorBlending.blendConstants[1] = 0.0f;
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
-    
+
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
     layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutCreateInfo.pNext = nullptr;
@@ -655,10 +753,11 @@ VkResult TriApp::InitGraphicsPipeline()
         }
     }
 
-    if (mGraphicsPipeline)
+    if (!mGraphicsPipeline)
     {
         VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
-        pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineCreateInfo.sType =
+            VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineCreateInfo.pNext = nullptr;
         pipelineCreateInfo.stageCount = 2;
         pipelineCreateInfo.pStages = stages;
@@ -684,27 +783,57 @@ VkResult TriApp::InitGraphicsPipeline()
             TriLogError() << "Failed to create VkGraphicsPipeline";
         }
     }
-    
+
     vkDestroyShaderModule(mDevice, vertexShader, nullptr);
     vkDestroyShaderModule(mDevice, fragmentShader, nullptr);
+
+    TriLogInfo() << "Graphics pipeline creation done: " << mGraphicsPipeline;
 
     return VK_SUCCESS;
 }
 
 void TriApp::Loop()
 {
-    return; // TODO(42): Remove this thing
-
     while (mpWindow && !glfwWindowShouldClose(mpWindow))
     {
         glfwPollEvents();
-        RenderFrame();
-        glfwSwapBuffers(mpWindow);
     }
 }
 
 void TriApp::Finalize()
 {
+    if (mImageAvailableSemaphore)
+    {
+        vkDestroySemaphore(mDevice, mImageAvailableSemaphore, nullptr);
+        mImageAvailableSemaphore = nullptr;
+    }
+    if (mRenderFinishedSemaphore)
+    {
+        vkDestroySemaphore(mDevice, mRenderFinishedSemaphore, nullptr);
+        mRenderFinishedSemaphore = nullptr;
+    }
+    if (mInFlightFence)
+    {
+        vkDestroyFence(mDevice, mInFlightFence, nullptr);
+        mInFlightFence = nullptr;
+    }
+
+    if (mCommandPool)
+    {
+        vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
+        mCommandBuffer = nullptr;
+        mCommandPool = nullptr;
+    }
+
+    if (!mFramebuffers.empty())
+    {
+        for (VkFramebuffer framebuffer : mFramebuffers)
+        {
+            vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
+        }
+        mFramebuffers.clear();
+    }
+
     if (mRenderPass)
     {
         vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
@@ -1089,6 +1218,69 @@ VkShaderModule TriApp::CreateShaderModule(const std::vector<char> &svcBuffer)
     }
 
     return shaderModule;
+}
+
+bool TriApp::RecordCommandBuffer(VkCommandBuffer commandBuffer,
+                                 uint32_t imageIndex)
+{
+    VkCommandBufferBeginInfo commandBufferBeginInfo{};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.pNext = nullptr;
+    commandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+    VkResult result =
+        vkBeginCommandBuffer(mCommandBuffer, &commandBufferBeginInfo);
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed to begin command buffer";
+        return false;
+    }
+
+    VkRenderPassBeginInfo renderPassBeginInfo{};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.pNext = nullptr;
+    renderPassBeginInfo.framebuffer = mFramebuffers[imageIndex];
+    renderPassBeginInfo.renderArea.offset = {0, 0};
+    renderPassBeginInfo.renderArea.extent = mSwapExtent;
+    VkClearValue clearColor{};
+    clearColor.color = {{1.0f, 0.0f, 1.0f, 1.0f}};
+    renderPassBeginInfo.clearValueCount = 1;
+    renderPassBeginInfo.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass(mCommandBuffer, &renderPassBeginInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      mGraphicsPipeline);
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(mSwapExtent.width);
+    viewport.height = static_cast<float>(mSwapExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = mSwapExtent;
+
+    vkCmdSetViewport(mCommandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(mCommandBuffer, 0, 1, &scissor);
+
+    vkCmdDraw(mCommandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(mCommandBuffer);
+
+    result = vkEndCommandBuffer(mCommandBuffer);
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed to end command buffer";
+        return false;
+    }
+
+    return true;
 }
 
 void TriApp::RenderFrame() {}

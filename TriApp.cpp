@@ -1358,5 +1358,11 @@ void TriApp::RenderFrame()
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr;
 
-    vkQueuePresentKHR(mPresentQueue, &presentInfo);
+    result = vkQueuePresentKHR(mPresentQueue, &presentInfo);
+
+    if (result != VK_SUCCESS)
+    {
+        TriLogError() << "Failed to present queue";
+        return;
+    }
 }

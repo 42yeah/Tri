@@ -49,6 +49,7 @@ public:
        9. Setup graphics pipeline
        10. Setup framebuffers
        11. Setup command buffer pool & command buffer
+       12. Setup synchronization primitives
     */
     void Init();
     VkResult InitGraphicsPipeline();
@@ -137,7 +138,7 @@ private:
     VkCommandPool mCommandPool;
     VkCommandBuffer mCommandBuffer;
 
-    // Synchronization entities
+    // Synchronization primitives
     VkSemaphore mImageAvailableSemaphore;
     VkSemaphore mRenderFinishedSemaphore;
     VkFence mInFlightFence;

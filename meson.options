@@ -2,3 +2,8 @@ option('vulkan_sdk_root',
        type: 'string',
        description: 'vulkan directory ending in arch')
 
+option('vulkan_force_validation_layer',
+       type: 'boolean',
+       value: false,
+       description: 'Force use validation layer (even if it\'s release)')
+

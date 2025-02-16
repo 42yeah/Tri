@@ -30,5 +30,7 @@ conf_data.set('TRI_COLORED_LOG', tri_colored_log ? 1 : 0)
 configure_file(configuration: conf_data,
                output: 'TriConfig.hpp')
 
-executable('Tri', ['main.cpp', 'TriApp.cpp', 'TriUtils.cpp', 'TriLog.cpp'],
-           dependencies: [vk_lib, glfw, glm])
+executable('tri', ['main.cpp', 'TriApp.cpp', 'TriUtils.cpp', 'TriLog.cpp'],
+           dependencies: [vk_lib, glfw, glm],
+           cpp_args: ['-DVULKAN_HPP_NO_EXCEPTIONS',
+                      '-DVULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL'])

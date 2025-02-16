@@ -16,6 +16,12 @@ const char *TriAppResultToString(ETriAppResult result)
     case TriResultExtensionSelect:
         return "Failed during extension selection";
 
+    case TriResultVkInstance:
+        return "Failed during VkInstance creation";
+
+    case TriResultVkDebugUtilsMessenger:
+        return "Failed during VkDebugUtilsMessenger creation";
+
     case TriResultCount:
         return "Unknown failure";
     }

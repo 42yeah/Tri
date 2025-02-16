@@ -1,7 +1,10 @@
-#include <iostream>
+#include "TriApp.hpp"
 
 int main()
 {
-    std::cout << "Hello" << std::endl;
+    TriApp app(800, 600, "Tri");
+    app.Init();
+    app.Finalize();
+   
     return 0;
 }

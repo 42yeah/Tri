@@ -1,6 +1,6 @@
 #pragma once
 
-#define TRI_VALIDATION_LAYER_NAME "VK_LAYER_KHORNOS_validation"
+#define TRI_VALIDATION_LAYER_NAME "VK_LAYER_KHRONOS_validation"
 
 enum ETriAppResult
 {
@@ -8,6 +8,8 @@ enum ETriAppResult
     TriResultWindow,
     TriResultLayerSelect,
     TriResultExtensionSelect,
+    TriResultVkInstance,
+    TriResultVkDebugUtilsMessenger,
     TriResultCount
 };
 

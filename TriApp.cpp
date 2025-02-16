@@ -1,11 +1,46 @@
 #include "TriApp.hpp"
 
+#include "TriLog.hpp"
 #include "TriUtils.hpp"
 #include "TriConfig.hpp"
 
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan_funcs.hpp>
-#include <vulkan/vulkan_structs.hpp>
+#include <vulkan/vulkan.hpp>
+
+VkBool32 TriApp::OnDebugUtilsMessage(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+    void *pUserData)
+{
+    // TriApp *that = reinterpret_cast<TriApp *>(pUserData);
+    
+    switch (severity)
+    {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+        TriLogVerbose() << "[VK] " << pCallbackData->pMessage;
+        break;
+        
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+        TriLogInfo() << "[VK] " << pCallbackData->pMessage;
+        break;
+        
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+        TriLogWarning() << "[VK] " << pCallbackData->pMessage;
+        break;
+        
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+        TriLogError() << "[VK] " << pCallbackData->pMessage;
+        break;
+
+    default:
+        TriLogError() << "[VK ] Unknown message type: "
+            << pCallbackData->pMessage;
+        break;
+    }
+    
+    return false;
+}
 
 ETriAppResult TriApp::Init()
 {
@@ -18,12 +53,26 @@ ETriAppResult TriApp::Init()
     if (!ChooseInstanceAndDeviceExtensions())
         return TriResultExtensionSelect;
 
+    if (!InitVkInstance())
+        return TriResultVkInstance;
+
+    if (!InitDebugUtilsMessenger())
+        return TriResultVkDebugUtilsMessenger;
+
     return TriResultSuccess;
 }
 
 void TriApp::Finalize()
 {
+    TriLogInfo() << "Finalize";
+    
     mValid = false;
+
+    if (mVkInstance)
+    {
+        mVkInstance.destroy();
+        mVkInstance = nullptr;
+    }
     
     mInstanceLayers.clear();
     mInstanceExtensions.clear();
@@ -55,28 +104,122 @@ bool TriApp::ChooseInstanceLayers()
 
     // Iterate and locate layer availability
     std::vector<vk::LayerProperties> properties =
-        vk::enumerateInstanceLayerProperties();
+        vk::enumerateInstanceLayerProperties().value;
     std::vector<const char *> missingLayers;
 
     for (const char *layerName : mInstanceLayers)
     {
         auto pos = std::find_if(
-            mInstanceLayers.begin(), mInstanceLayers.end(),
+            properties.begin(), properties.end(),
             [layerName](const vk::LayerProperties &prop)
             { return std::string(layerName) == prop.layerName.data(); });
-        if (pos == mInstanceLayers.end())
+        bool found = (pos != properties.end());
+        if (!found)
             missingLayers.emplace_back(layerName);
+
+        TriLogVerbose() << "Instance layer support: " << layerName
+            << " .. " << (found ? "yes" : "no");
     }
 
-    // TODO(42): Print missing layers out
-
-    return true;
+    for (const char *layerName : missingLayers)
+        TriLogError() << "Missing layer: " << layerName;
+    
+    return missingLayers.empty();
 }
 
 bool TriApp::ChooseInstanceAndDeviceExtensions()
 {
+    uint32_t glfwExtensionCount = 0;
+    const char **ppGlfwExtensions =
+        glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    mInstanceExtensions.insert(mInstanceExtensions.end(), ppGlfwExtensions,
+                               ppGlfwExtensions + glfwExtensionCount);
+
+#if TRI_VK_FORCE_VALIDATION_LAYER
+    mInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
+#endif
+
+    std::vector<vk::ExtensionProperties> properties =
+        vk::enumerateInstanceExtensionProperties().value;
+    std::vector<const char *> missingExtensions;
+
+    for (const char *extName : mInstanceExtensions)
+    {
+        auto pos = std::find_if(
+            properties.begin(), properties.end(),
+            [extName](const vk::ExtensionProperties &prop)
+            { return std::string(extName) == prop.extensionName.data(); });
+        bool found = (pos != properties.end());
+        if (!found)
+            missingExtensions.emplace_back(extName);
+
+        TriLogVerbose() << "Extension support: " << extName << "  .. "
+            << (found ? "yes" : "no");
+    }
+
+    for (const char *extName : missingExtensions)
+        TriLogError() << "Missing extensions: " << extName;
+
+    // TODO(42): Device extensions
+    
+    return missingExtensions.empty();
+}
+
+bool TriApp::InitVkInstance()
+{
+#if TRI_VK_FORCE_VALIDATION_LAYER
+    vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
+
+    vk::DebugUtilsMessageTypeFlagsEXT typeFlags(
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding);
+
+    mVkDebugUtilsMessengerCreateInfo = vk::DebugUtilsMessengerCreateInfoEXT(
+        {}, severityFlags, typeFlags, TriApp::OnDebugUtilsMessage, this,
+        nullptr);
+
+#endif
+
+    vk::InstanceCreateInfo createInfo =
+        vk::InstanceCreateInfo()
+#if TRI_VK_FORCE_VALIDATION_LAYER
+            .setPNext(&mVkDebugUtilsMessengerCreateInfo)
+#endif
+            .setPEnabledLayerNames(mInstanceLayers)
+            .setPEnabledExtensionNames(mInstanceExtensions);
+
+    vk::ResultValue<vk::Instance> instance = vk::createInstance(createInfo);
+
+    if (instance.result != vk::Result::eSuccess)
+        return false;
+
+    mVkInstance = std::move(instance.value);
+
     return true;
 }
+
+#if TRI_VK_FORCE_VALIDATION_LAYER
+bool TriApp::InitDebugUtilsMessenger()
+{
+    // TODO(42):
+    vk::ResultValue<vk::DebugUtilsMessengerEXT> messenger = mVkInstance.createDebugUtilsMessengerEXT(
+        mVkDebugUtilsMessengerCreateInfo, nullptr, vk::detail::DispatchLoaderDynamic());
+
+    if (messenger.result != vk::Result::eSuccess)
+        return false;
+
+    mVkDebugUtilsMessenger = messenger.value;
+
+    return true;
+}
+#endif
 
 void TriApp::FinalizeWindow()
 {

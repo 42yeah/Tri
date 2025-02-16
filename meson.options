@@ -1,0 +1,4 @@
+option('vulkan_sdk_root',
+       type: 'string',
+       description: 'vulkan directory ending in arch')
+

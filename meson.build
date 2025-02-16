@@ -21,12 +21,14 @@ glfw = cpp.find_library('glfw', required: true)
 glm = cpp.find_library('glm', required: true)
 
 vk_force_val = get_option('vulkan_force_validation_layer') or (get_option('buildtype') == 'debug')
+tri_colored_log = get_option('tri_colored_log')
 
 conf_data = configuration_data()
 conf_data.set('TRI_VK_FORCE_VALIDATION_LAYER', vk_force_val ? 1 : 0)
+conf_data.set('TRI_COLORED_LOG', tri_colored_log ? 1 : 0)
 
 configure_file(configuration: conf_data,
                output: 'TriConfig.hpp')
 
-executable('Tri', ['main.cpp', 'TriApp.cpp', 'TriUtils.cpp'],
+executable('Tri', ['main.cpp', 'TriApp.cpp', 'TriUtils.cpp', 'TriLog.cpp'],
            dependencies: [vk_lib, glfw, glm])

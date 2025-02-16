@@ -7,3 +7,8 @@ option('vulkan_force_validation_layer',
        value: false,
        description: 'Force use validation layer (even if it\'s release)')
 
+option('tri_colored_log',
+       type: 'boolean',
+       value: true,
+       description: 'Use colored log')
+

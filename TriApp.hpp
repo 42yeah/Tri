@@ -12,7 +12,6 @@
 
 #include <string>
 #include <vector>
-#include <optional>
 
 class TriApp
 {
@@ -20,7 +19,7 @@ public:
     TriApp(int width, int height, const std::string &appName)
         : mWidth(width), mHeight(height), mAppName(appName), mpWindow(nullptr),
           mValid(false), mInstanceLayers(), mInstanceExtensions(),
-          mDeviceExtensions(), mVkInstance()
+          mDeviceExtensions(), mVkInstance(), mDispatchLoaderDynamic()
     {
 #if TRI_VK_FORCE_VALIDATION_LAYER
         mVkDebugUtilsMessengerCreateInfo = vk::DebugUtilsMessengerCreateInfoEXT();
@@ -68,6 +67,7 @@ private:
     std::vector<const char *> mDeviceExtensions;
 
     vk::Instance mVkInstance;
+    vk::detail::DispatchLoaderDynamic mDispatchLoaderDynamic;
 
 #if TRI_VK_FORCE_VALIDATION_LAYER
     vk::DebugUtilsMessengerCreateInfoEXT mVkDebugUtilsMessengerCreateInfo;

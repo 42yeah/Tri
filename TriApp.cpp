@@ -68,12 +68,20 @@ void TriApp::Finalize()
     
     mValid = false;
 
+    if (mVkDebugUtilsMessenger)
+    {
+        mVkInstance.destroyDebugUtilsMessengerEXT(
+            mVkDebugUtilsMessenger, nullptr, mDispatchLoaderDynamic);
+        
+        mVkDebugUtilsMessenger = nullptr;
+    }
+    
     if (mVkInstance)
     {
         mVkInstance.destroy();
         mVkInstance = nullptr;
     }
-    
+
     mInstanceLayers.clear();
     mInstanceExtensions.clear();
     mDeviceExtensions.clear();
@@ -202,15 +210,18 @@ bool TriApp::InitVkInstance()
 
     mVkInstance = std::move(instance.value);
 
+    VkInstance cInstance = static_cast<VkInstance>(mVkInstance);
+    mDispatchLoaderDynamic =
+        vk::detail::DispatchLoaderDynamic(cInstance, vkGetInstanceProcAddr);
+
     return true;
 }
 
 #if TRI_VK_FORCE_VALIDATION_LAYER
 bool TriApp::InitDebugUtilsMessenger()
 {
-    // TODO(42):
     vk::ResultValue<vk::DebugUtilsMessengerEXT> messenger = mVkInstance.createDebugUtilsMessengerEXT(
-        mVkDebugUtilsMessengerCreateInfo, nullptr, vk::detail::DispatchLoaderDynamic());
+        mVkDebugUtilsMessengerCreateInfo, nullptr, mDispatchLoaderDynamic);
 
     if (messenger.result != vk::Result::eSuccess)
         return false;
